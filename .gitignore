@@ -1,0 +1,63 @@
+# Editor temporary/working/backup files #
+.#*
+*\#*\#
+[#]*#
+*~
+*$
+*.bak
+*flymake*
+*.kdev4
+*.log
+*.swp
+*.pdb
+.project
+.pycharmproject
+.settings
+*.idea
+.dst
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+
+# Unit test / coverage reports
+/tests/
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+
+
+# Sphinx documentation
+docs/_build/
+
+# Mac Specific:
+.DS_Store
+
+
+# misc
+*.xml

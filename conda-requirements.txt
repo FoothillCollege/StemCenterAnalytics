@@ -1,0 +1,6 @@
+# minimal requirements ensures that conda/heroku resolve dependencies during deployment
+nomkl    # unlike the other dependencies, the below won't compile without listing here
+cython
+numpy
+pandas
+flask

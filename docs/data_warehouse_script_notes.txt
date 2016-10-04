@@ -1,0 +1,39 @@
+---------------------------- The Scripts and Their Goals: A First Draft ----------------------------
+Note: the following notes are unrefined ideas regarding the formation of a full fledged data
+      retrieval pipeline (as opposed to the current historical data analysis)
+
+Before we begin, let's make one thing very clear:
+    - The scripts will be where the data is imported, exported, and cleaned on a
+      regular basis as to be used to drive the data warehouse/server.
+
+Over the course of development, there's been one thing that has become crystal clear:
+   - It's very important to make the data as little reliant on the source as possible.
+
+Thus the above virtue endows the following implications on the backend:
+    - Source (raw) data must be inferred from as much as possible,
+      (eg: calculate quarters yourself, etc), and all columns except for
+      start time, end time, course_subject, course_number, course_section
+      are all that is needed. ALL other columns WILL be dropped (except maybe for
+      anon stud id, which could be secured elsewhere in a locked area on the server -
+      since if someone did ever want to do research that built upon such a value,
+      it would be completely impossible to get it back)
+
+    - As well as the above inferring, the column names and ordering of the source
+      cannot be relied on. The STEM Center's data retrieval/storage system, SARS,
+      is constantly changing the format of their outputted data. This means that
+      we must have column matching heuristics. The best method seems to be
+      one of which we identify which columns are what (by examining their data).
+      This should be straight forward (but slow) with the use of the parsing functions.
+
+    - Additionally, the scripts must be capable of appending from the SARS data source,
+      to the (uncleaned) CSVs in the dataset, and from their, to the (cleaned) db.
+      We need to figure out how retrieve that data, be it through email, or another folder
+      outside the project on the machine. That begs the other question: should it be sorted
+      into folders? Or one giant CSV/excel sheet...
+
+    - Last but not least, it's essential that we have cron jobs running on a daily (or hourly)
+      basis, to ensure that everything is up to date. This also means that in the case of
+      delay, temporary delay of the data source, that the process/backend is smart/robust
+      enough to handle issues.
+
+----------------------------------------------------------------------------------------------------
