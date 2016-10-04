@@ -1,0 +1,45 @@
+// Wait times only for specified time scale
+{
+    "Chemistry":[
+        "62",
+        "29",
+        "81",
+        "0"
+    ],
+    "Physics":[
+        "62",
+        "29",
+        "81",
+        "0"
+    ]
+}
+
+// GET request format
+?range=quarter&time=blah&courses=math%201d,math%2010
+
+// Static courses list
+{
+    "order":["math","phys","chem"],
+    "math":[
+        "Mathematics",
+        "48A",
+        "48B",
+        "48C",
+        "1A",
+        "1B",
+        "1C",
+        "1D"
+    ],
+    "phys":[
+        "Physics",
+        "2A",
+        "4A",
+        "4B",
+        "4C",
+        "4D"
+    ],
+    "Chemistry":[],
+    "Biology":[],
+    "Computer Science":[],
+    "Engineering":[]
+}
