@@ -1,3 +1,3 @@
 View on [GitHub Pages](https://pages.github.com/) at:
 
-**http://foothillcollege.github.io/StemAnalytics/**
+**http://foothillcollege.github.io/StemCenterAnalytics/**
