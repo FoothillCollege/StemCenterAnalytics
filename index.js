@@ -66,7 +66,7 @@ function setCharts(statFile) {
     waitTimeData.datasets[0].data = [];
     
     // Wait for JSON request success before using data
-    $.getJSON(statFile, null, function(data) {
+    /*$.getJSON(statFile, null, function(data) {
         $.each(data.num_requests, function(label, value) {
             demandData.labels.push(label);
             demandData.datasets[0].data.push(value);
@@ -77,11 +77,11 @@ function setCharts(statFile) {
         });
         window.demandChart.update();
         window.waitTimeChart.update();
-    })
+    })*/
     
     // Use GET request
     $.ajax({
-        url: '',
+        url: 'https://stem-analytics.herokuapp.com/',
         type: 'get',
         data: {'quarter':'Summer 2015',
                'courses':'all'},
@@ -95,13 +95,54 @@ function setCharts(statFile) {
                 waitTimeData.labels.push(label);
                 waitTimeData.datasets[0].data.push(value);
             });
+            /*$.each(data.trend_requests, function(label, value) {
+                demandTrendData
+            });*/
+            $.getJSON(data.course_records, null, function(data2) {
+                $.each(data2.ordering, function(index, subject) {
+                    var li = $(document.createElement('li')).appendTo('#courseList');
+                    $(document.createElement('div')).addClass('arrow').appendTo(li);
+                    $(document.createElement('input')).attr({
+                        type: 'checkbox',
+                        value: subject
+                    }).appendTo(li);
+                    $(document.createTextNode(subject)).appendTo(li);
+                    var ul = $(document.createElement('ul')).appendTo(li);
+                    $.each(data2[subject], function(index, course) {
+                        li = $(document.createElement('li')).appendTo(ul);
+                        $(document.createElement('input')).attr({
+                            type: 'checkbox',
+                            value: course
+                        }).appendTo(li);
+                        $(document.createTextNode(course)).appendTo(li);
+                    });
+                })
+                // Make course list expandable
+                $('#courseList').find('li:has(ul)')
+                    .click( function(event) {
+                    if (!$(event.target).is('input')) {
+                        $(this).children('.arrow').toggleClass('expanded');
+                        $(this).children('ul').toggle('fast');
+                    }
+                })
+                .children('ul').hide();
+            })
             window.demandChart.update();
             window.waitTimeChart.update();
+            drawHeatmap();
         },
         error: function(xhr) {
             showError(true, xhr);
         }
-    })
+    });
+
+    resizeHeatmap();
+}
+
+function resizeHeatmap() {
+    var heatmap = $('#demand-heatmap')
+    heatmap.width($('#charts-container').width() * 0.97);
+    heatmap.height($('#charts-container').width() * 0.25);
 }
 
 function drawHeatmap() {
@@ -120,7 +161,7 @@ function showError(boolShow, xhr) {
 // Executes after DOM is loaded
 $(document).ready(function() {
     // Generate course list
-    $.getJSON(coursesFile, null, function(data) {
+    /*$.getJSON(coursesFile, null, function(data) {
         $.each(data.ordering, function(index, subject) {
             var li = $(document.createElement('li')).appendTo('#courseList');
             $(document.createElement('div')).addClass('arrow').appendTo(li);
@@ -148,7 +189,7 @@ $(document).ready(function() {
             }
         })
         .children('ul').hide();
-    })
+    })*/
     
     // Render charts
     var demandCtx = document.getElementById('demand-chart').getContext('2d');
