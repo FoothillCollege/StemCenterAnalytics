@@ -11,10 +11,10 @@ time_of_request,wait_time,quarter,week_in_quarter,day,course_subject,course_numb
 2013-09-25 11:05:32,62,Fall 2013,1,W,Chemistry,30A,1,3
 2013-09-25 11:06:12,29,Fall 2013,1,W,Mathematics,48B,1,3
 """
-from stem_analytics import EXTERNAL_DATASETS_DIR, INTERNAL_DATASETS_DIR
-from stem_analytics.core import df_tools
-from stem_analytics.utils import database_io, file_io, paths
-from stem_analytics.warehouse import _data_models
+import stem_center_analytics
+from stem_center_analytics import EXTERNAL_DATASETS_DIR, INTERNAL_DATASETS_DIR
+from stem_center_analytics.utils import io_lib, os_lib
+from stem_center_analytics.warehouse import _data_models
 
 # todo: add wait_time fix to avoid issues with zero wait_times; cause such a thing is impossible
 # ???
@@ -37,9 +37,9 @@ SUBJECT_NAME_MAP = {
 def main():
     # fixme: modify script to clean completely raw data (rather than partially)
     data_file_name = 'semi_clean_requests.csv'
-    df_tools.config_pandas_display_size()
-    df = file_io.read_flat_file_as_df(
-        paths.join_path(EXTERNAL_DATASETS_DIR, 'misc_data', data_file_name)
+    stem_center_analytics.config_pandas_display_size()
+    df = io_lib.read_flat_file_as_df(
+        os_lib.join_path(EXTERNAL_DATASETS_DIR, 'misc_data', data_file_name)
     )
 
     # replace course column by its components (subject, number, section)
@@ -64,10 +64,14 @@ def main():
     df.insert(loc=position_next_to_week, column='day_in_week', value=df.index.weekday + 1)
 
     # rebuilds database with tutor request data
-    db_path = paths.join_path(INTERNAL_DATASETS_DIR, 'stem_center_db.sql')
-    database_io.create_sql_file(db_path, replace_if_exists=True)
+    db_path = os_lib.join_path(INTERNAL_DATASETS_DIR, 'stem_center_db.sql')
+    io_lib.create_sql_file(db_path, replace_if_exists=True)
     with _data_models.connect_to_stem_center_db() as con:
-        database_io.write_df_to_database(con, df, new_table_name='tutor_requests')
+        io_lib.write_df_to_database(con, df, new_table_name='tutor_requests')
+
+
+# since input validation's only accepts a datetime RANGE (dashed input),
+# use input validation's function parse_datetime and apply to col/index
 
 
 if __name__ == '__main__':

@@ -1,6 +1,8 @@
 # minimal requirements ensures that conda/heroku resolve dependencies during deployment
-nomkl    # unlike the other dependencies, the below won't compile without listing here
+# using conda buildpack @ BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
+nomkl    # adding this reduces slug size by ~100 mb
 cython
 numpy
 pandas
 flask
+flask-cors

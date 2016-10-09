@@ -6,7 +6,7 @@ setup(
     name="STEM Analytics Backend",
     version="0.1.0",
 
-    packages=find_packages(),  # - or find_packages(where='stem_analytics')
+    packages=find_packages(),  # - or find_packages(where='stem_center_analytics')
     scripts=['\scripts'],
     install_requires=["python>=3.5.2",
                       "cython>=0.24.1",

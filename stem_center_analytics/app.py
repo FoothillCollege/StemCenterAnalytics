@@ -4,11 +4,10 @@
 Examples
 --------
 To test the web service locally, run the below commands from terminal (ensure debug_mode=True):
-    curl -u jeff:python -i "http://127.0.0.1:5000/?day=2013-09-25&courses=all"
-    curl -u jeff:python -i "http://127.0.0.1:5000/?week=Fall+2013,Week+1&courses=all"
-    curl -u jeff:python -i "http://127.0.0.1:5000/?quarter=Fall+2013&courses=all"
+    curl -u jeff:python -i "http://127.0.0.1:5000/?day=2013-09-25&courses=ALL_SUBJECTS"
+    curl -u jeff:python -i "http://127.0.0.1:5000/?week=Fall+2013,Week+1&courses=ALL_SUBJECTS"
+    curl -u jeff:python -i "http://127.0.0.1:5000/?quarter=Fall+2013&courses=ALL_SUBJECTS"
 """
-import os
 import io
 import json
 from typing import Iterable
@@ -16,19 +15,20 @@ from typing import Iterable
 import flask
 import pandas as pd
 from flask import Flask, jsonify, make_response, request
+from flask_cors import CORS
 
-from stem_analytics import EXTERNAL_DATASETS_DIR
-from stem_analytics.utils import paths
-from stem_analytics.warehouse import get_quarter_dates
+from stem_center_analytics import EXTERNAL_DATASETS_DIR, warehouse
+from stem_center_analytics.utils import os_lib
 
 # --------------------------------------------------------------------------------------------------
 # NOTE - this web service is a temporary setup, with the data be replaced by dynamic API calls
-# todo: replace static file retrieval with dynamic API calls to stem_analytics.core
+# todo: replace static file retrieval with dynamic API calls to stem_center_analytics.CORE_SUBJECTS
 # todo: add more specific error handling + catch dispatching errors (figure out on google, later!)
 # todo: figure out how to cache code/modules (NOT the data) - aka minimize loading times/session(s)
 # --------------------------------------------------------------------------------------------------
 
-app = Flask(__name__, static_url_path='')
+app = Flask(__name__)
+CORS(app)
 
 # establish the inferred interval for a given time range
 RANGE_TO_INTERVAL_MAP = {
@@ -50,7 +50,7 @@ def not_found(error):
 
 def _determine_quarter_by_date(date_string: str) -> str:
     """Return quarter in which given date resides (eg: '2013-09-25'-> 'Fall 2013')."""
-    df = get_quarter_dates()
+    df = warehouse.get_quarter_dates()
     date = pd.to_datetime(date_string, format='%Y-%m-%d %H:%M:%S')
     for quarter_name in df.index:
         quarter_row = df.ix[quarter_name]
@@ -94,7 +94,7 @@ def _parse_request(request_args: flask.Request.args) -> dict:
     else:
         raise ValueError('Internal Error.')
     interval_type = RANGE_TO_INTERVAL_MAP[time_range_type]
-    # eg: Fall 2013 day week 1 ['all']
+    # eg: Fall 2013 day week 1 ['ALL_SUBJECTS']
     # print(quarter_name, interval_type, time_range_type, time_range_value, courses)
     return {'quarter': quarter_name,
             'interval': interval_type,
@@ -104,7 +104,7 @@ def _parse_request(request_args: flask.Request.args) -> dict:
 
 def _get_file(quarter: str, time_range_type: str,
               time_range: str, interval: str,
-              courses: Iterable[str]=('all',)) -> io.TextIOWrapper:
+              courses: Iterable[str]=('ALL_SUBJECTS',)) -> io.TextIOWrapper:
     """Return json file corresponding to given data.
 
     Examples
@@ -116,9 +116,9 @@ def _get_file(quarter: str, time_range_type: str,
     _get_file(quarter='Fall+2013', time_range_type='day',
               time_range='2013-09-25', interval='hour'))
     """
-    if courses != 'all' and courses != ('all',) and courses != ['all']:
+    if courses != 'ALL_SUBJECTS' and courses != ('ALL_SUBJECTS',) and courses != ['ALL_SUBJECTS']:
         raise ValueError('No specific courses supported yet.')
-    matched_file = paths.join_path(
+    matched_file = os_lib.join_path(
         EXTERNAL_DATASETS_DIR,
         'pre_generated_data',
         quarter.replace('+', ' ').replace(' ', '_'),
@@ -126,13 +126,13 @@ def _get_file(quarter: str, time_range_type: str,
             time_range_type,
             time_range.replace('+', ' ').replace(' ', '_'), interval)
     )
-    paths.ensure_file_path_exists(matched_file)
+    os_lib.ensure_file_exists(matched_file)
     with open(matched_file, mode='r') as json_file:
         return json.load(json_file)
 
 
 # fixme: add dispatching error handling for invalid tokens in url routes
-@app.route('/')
+@app.route('/', methods=['GET'])
 def main():
     """Core web service function.
 
@@ -153,9 +153,6 @@ def main():
     except (ValueError, FileNotFoundError):
         flask.abort(400)
 
+
 if __name__ == '__main__':
-    debug_mode = True  # toggle this for release/debug modes (set to True if using curl locally)
-    if debug_mode:
-        app.run(debug=True)
-    else:
-        app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 33507)))  # rebind to env's port
+    app.run(host='0.0.0.0')  # rebind to env's port

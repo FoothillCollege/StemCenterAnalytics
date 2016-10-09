@@ -49,7 +49,7 @@ from sys import modules
 
 import pandas as pd
 
-import stem_analytics.utils.paths
+import stem_center_analytics.utils.os_lib
 
 __author__ = 'Jeff'
 __version__ = '1.3.0'
@@ -60,27 +60,33 @@ pd.set_option('display.max_columns', 20)
 pd.set_option('display.width', 500)
 
 
-SOURCE_DIR = stem_analytics.utils.paths.get_path_of_python_source(modules[__name__])
-PROJECT_DIR = stem_analytics.utils.paths.get_parent_dir(SOURCE_DIR)
+SOURCE_DIR = stem_center_analytics.utils.os_lib.get_path_of_python_source(modules[__name__])
+PROJECT_DIR = stem_center_analytics.utils.os_lib.get_parent_dir(SOURCE_DIR)
 
-INTERNAL_DATASETS_DIR = stem_analytics.utils.paths.join_path(SOURCE_DIR, 'warehouse')
-EXTERNAL_DATASETS_DIR = stem_analytics.utils.paths.join_path(PROJECT_DIR, 'external_datasets')
+INTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(SOURCE_DIR, 'warehouse')
+EXTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(PROJECT_DIR, 'external_datasets')
 
 
-# let user know if any core dependencies or stem_analytics packages are missing
+# let user know if any CORE_SUBJECTS dependencies or stem_center_analytics packages are missing
 # this allows us to catch import errors early on, rather than upon use of specific modules.
-stem_analytics.utils.paths.ensure_successful_imports(names=('pandas', 'flask', 'numpy', 'cython'))
+stem_center_analytics.utils.os_lib.ensure_successful_imports(names=('pandas', 'flask', 'numpy', 'cython'))
 
 # fixme: figure out why below fails on heroku deploy but not here
 '''
-stem_analytics.utils.paths.ensure_successful_imports(names=__all__)  # catch import errors early on
+stem_center_analytics.utils.paths.ensure_successful_imports(names=__all__)  # catch import errors early on
 '''
 
+
 # import public Class APIs
-from stem_analytics.interface import TutorLog, LoginData
+from stem_center_analytics.interface import TutorLog, LoginData
 
 
 # todo: add automated backups to stem_center_db
-# todo: ensure all documentation is up to date and cleaned up
-# todo: finish conversion of all documentation to numpy format
+# todo: ensure ALL_SUBJECTS documentation is up to date and cleaned up
+# todo: finish conversion of ALL_SUBJECTS documentation to numpy format
 # todo: migrate doctests to a testing package where appropriate - particularly regression tests
+def config_pandas_display_size(max_rows: int=50, max_cols: int=20, max_width: int=500) -> None:
+    """Configure Pandas display settings, to allow pretty-printing for console output."""
+    pd.set_option('display.max_rows', max_rows)
+    pd.set_option('display.max_columns', max_cols)
+    pd.set_option('display.width', max_width)

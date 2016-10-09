@@ -1,9 +1,9 @@
 """Script to generate demand and wait-time statistics based on historical data.
 
 Three general categories of generated json files:
-- single file generated containing daily averages over a quarter range
-- one file generated per week in qtr containing daily averages over a week range
-- one file generated per day in qtr containing hourly averages over a day (24hr) range
+* Single file generated containing daily averages over a quarter range
+* One file generated per week in qtr containing daily averages over a week range
+* One file generated per day in qtr containing hourly averages over a day (24hr) range
 
 Notes
 -----
@@ -11,23 +11,25 @@ Assumes file format: 2013-09-25 11:05:32,F 13,1,W,chem 30a 1,62,782484
 Assumes date format: ([] denotes optional): 'YY-MM-DD [HH[:MM:SS am/pm]]'
 
 File names are generated with the following components:
-- qtr_name: format 'xxDD' (eg, sp15)
-- domain: 'T_I' where T is time range type (i.e., qtr) and I is time
+* quarter name: format 'xxDD' (eg, sp15)
+* domain: 'T_I' where T is time range type (i.e., qtr) and I is time
   range instance (eg, sp15)
-- interval: one of 'hour', 'day', or 'week'
-- metric: one of 'waittime' or 'demand'
+* interval: one of 'hour', 'day', or 'week'
+* metric: one of 'waittime' or 'demand'
 """
-import shutil
+import contextlib
 from typing import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
 
-from stem_analytics import EXTERNAL_DATASETS_DIR
-from stem_analytics.utils import paths
-from stem_analytics.core import input_validation
-from stem_analytics.warehouse import get_tutor_request_data
+from stem_center_analytics import EXTERNAL_DATASETS_DIR
+from stem_center_analytics.core import input_validation
+from stem_center_analytics.utils import os_lib, io_lib
+from stem_center_analytics.warehouse import get_tutor_request_data
 
+
+# todo: figure out the json isn't serializable error
 
 def _sort_index_by_list(df: pd.DataFrame, rank_order: Iterable[object]) -> pd.DataFrame:
     """Return given DF sorted by given columns according to `rank_order`."""
@@ -57,11 +59,11 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
 
     Notes
     -----
-        Aggregation is all done on 'wait_time' column, except for counts, in
+        Aggregation is ALL_SUBJECTS done on 'wait_time' column, except for counts, in
         which no specific column is needed.
         Parameters are not parsed.
     """
-    interval_type_ = input_validation.parse_time_unit_label(interval_type)
+    interval_type_ = input_validation.parse_time_unit_name(interval_type)
     if interval_type_ in ('day_in_week', 'week_in_quarter', 'quarter'):
         col_data = [sc_data.__getattr__(interval_type)]
     elif interval_type in ('hour', 'month', 'year'):
@@ -78,8 +80,10 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
         aggregated_df.rename(columns={'quarter': 'num_requests'}, inplace=True)
 
     if interval_type == 'quarter':  # ordering undefined for quarter strings, so sort output...
-        quarters = [q + ' ' + str(y) for y in range(2000, 3000) for q in ('W', 'S', 'U', 'F')]
-        return _sort_index_by_list(df=aggregated_df, rank_order=quarters)
+        return _sort_index_by_list(
+            df=aggregated_df,
+            rank_order=input_validation.academic_time_units.quarter_with_year.keys()
+        )
     return aggregated_df
 
 
@@ -100,8 +104,8 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
     -----
     Unlike aggregate sc_data, parameters are parsed.
     """
-    metric_type_ = input_validation.parse_metric_type(metric_type)
-    interval_type_ = input_validation.parse_time_unit_label(interval_type)
+    metric_type_ = input_validation.parse_metric_name(metric_type)
+    interval_type_ = input_validation.parse_time_unit_name(interval_type)
     # print(interval_type, '===>', interval_type_)
     if metric_type_ == 'demand':
         aggregate_mappings = {'quarter': np.count_nonzero}  # arbitrary column name for counting
@@ -113,30 +117,36 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
                               interval_type=interval_type_)
 
 
+def convert_keys_to_strings(dict_: Mapping) -> Mapping:
+    """Convert keys of given dictionary to strings."""
+    new_dict_ = {}
+    for key in dict_:
+        new_dict_[str(key)] = dict_[key]
+    return new_dict_
+
+
 def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: str) -> None:
     """Generate demand and wait-time metrics for various ranges in quarter."""
-    def generate_json_demo_data(data_within_range: pd.DataFrame,
-                                range_: str, interval_: str) -> None:
-        """Generates json file with demand and wait_time for given range and interval."""
-        demand_data = compute_metric_on_intervals(data_within_range, interval_, 'demand')
-        wait_time_data = compute_metric_on_intervals(data_within_range, interval_, 'wait_time')
-        if interval_ == 'week_in_quarter':
-            interval_ = 'week'
-        output_path = paths.join_path(output_dir,
-                                      'time_range={}&interval={}.json'.format(range_, interval_))
-        with open(output_path, 'w') as json_file:
-            data_dict = {}
-            data_dict.update(demand_data.to_dict())
-            data_dict.update(wait_time_data.to_dict())
-            json_string = pd.json.dumps(data_dict)
-            json_file.write(json_string)
+    def generate_json_demo_data(data_in_range: pd.DataFrame, range_: str, interval_: str) -> None:
+        # write json file with demand and wait_time for given range and interval
+        demand = compute_metric_on_intervals(data_in_range, interval_, 'demand').to_dict()
+        wait_time = compute_metric_on_intervals(data_in_range, interval_, 'wait_time').to_dict()
+
+        demand_key, wait_time_key = list(demand.keys())[0], list(wait_time.keys())[0]
+        data = {demand_key: convert_keys_to_strings(demand[demand_key]),
+                wait_time_key: convert_keys_to_strings(wait_time[wait_time_key])}
+        print(data)
+        interval_ = 'week' if interval_ == 'week_in_quarter' else interval_
+        file_name = 'time_range={}&interval={}.json'.format(range_, interval_)
+        io_lib.write_json_file(file_path=os_lib.join_path(output_dir, file_name),
+                               contents=data)
 
     if len(set(requests_in_quarter['quarter'])) != 1:
         raise ValueError('Given data must contain only one quarter type (eg: \'Fall 2015\').')
 
     # single file (since single quarter) generated containing daily stats over a quarter
     quarter_term, quarter_year = requests_in_quarter['quarter'].iloc[0].split()
-    generate_json_demo_data(data_within_range=requests_in_quarter,
+    generate_json_demo_data(data_in_range=requests_in_quarter,
                             range_='quarter+{}_{}'.format(quarter_term, quarter_year),
                             interval_='week_in_quarter')
 
@@ -144,7 +154,7 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
     all_weeks_in_qtr = requests_in_quarter['week_in_quarter'].unique()
     for week_num in all_weeks_in_qtr:
         single_week_data = requests_in_quarter[requests_in_quarter['week_in_quarter'] == week_num]
-        generate_json_demo_data(data_within_range=single_week_data,
+        generate_json_demo_data(data_in_range=single_week_data,
                                 range_='week+{}'.format(week_num),
                                 interval_='day')
 
@@ -152,20 +162,22 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
     all_recorded_datetimes = pd.Series(data=requests_in_quarter.index)
     dates_in_qtr = all_recorded_datetimes.apply(func=lambda dt: str(dt).split()[0]).unique()
     for date in dates_in_qtr:
-        generate_json_demo_data(data_within_range=requests_in_quarter[date],
+        generate_json_demo_data(data_in_range=requests_in_quarter[date],
                                 range_='day+{}'.format(date),
                                 interval_='hour')
 
 
 def main():
     df = get_tutor_request_data()
-    root_output_dir = paths.join_path(EXTERNAL_DATASETS_DIR, 'pre_generated_data')
+    root_output_dir = os_lib.join_path(EXTERNAL_DATASETS_DIR, 'pre_generated_data')
+    with contextlib.suppress(OSError):
+        os_lib.remove_directory(root_output_dir)  # clear the dir if exists
+    os_lib.create_directory(root_output_dir)
     for quarter_name in df['quarter'].unique():
-        output_dir = paths.join_path(root_output_dir, quarter_name.replace(' ', '_'))
-        shutil.rmtree(output_dir, ignore_errors=True)  # clear the dir if exists
-        paths.make_dir_if_not_present(output_dir)
+        output_sub_dir = os_lib.join_path(root_output_dir, quarter_name.replace(' ', '_'))
+        os_lib.create_directory(output_sub_dir)
         requests_in_quarter = df[df['quarter'] == quarter_name]
-        generate_demo_quarter_data(requests_in_quarter, output_dir)
+        generate_demo_quarter_data(requests_in_quarter, output_sub_dir)
 
 
 if __name__ == '__main__':
