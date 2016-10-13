@@ -1,0 +1,66 @@
+# _____________________________Command Archives for StemCenterAnalytics_____________________________
+# author: Jeff Persons
+# note: below works for windows on git-bash, but with paths changed should work anywhere else to
+
+
+# ================================= Commonly Used Project Commands =================================
+#  assumes below creation steps have been taken
+cd "C:\Users\jperm\Documents\GitHub\StemCenterAnalytics"
+heroku open                           # view the app from browser
+
+heroku console                        # to get extra details not present in logs
+heroku logs --tail                    # view logs (Control+C to exit log streaming)
+git push heroku master
+
+heroku restart
+heroku local web -f Procfile.windows  # run locally on windows
+
+cloc "C:\Users\jperm\Documents\GitHub\StemCenterAnalytics"  # count total lines of code in project
+
+
+# =============================== Creating Conda-Based app in Heroku ===============================
+# ensure conda/heroku installed
+# ensure repo "https://github.com/FoothillCollege/StemCenterAnalytics" is cloned
+# create config files: Procfile, runtime.txt, requirements.txt, conda-requirements.txt
+# in the latter, add nomkl (saves ~100mb!) followed by hard-dependencies w/o version numbers
+# in requirements.txt, add hard package requirements only found on pip (eg: gunicorn)
+
+cd "C:\Users\jperm\Documents\GitHub\StemCenterAnalytics"  # change to project dir
+
+# create the app, sync conda, and push the changes
+heroku                        # installs if not already (CLI prompts for credentials
+heroku create stem-analytics  # create app (w/ name) so heroku is ready to receive the code
+git push heroku master        # push local's contents to heroku's master branch (deploys app)
+heroku config:add --app stem-analytics BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
+
+git remote add heroku "https://stem-analytics.herokuapp.com/"     # add remote access id to project
+heroku ps:scale web=1                                             # ensure only instance is running
+heroku config:set PORT=33507                                      # set flask specific port
+heroku restart
+
+
+# ====================================== Emergency App Reset =======================================
+git init
+git add .
+git commit -m "Heroku commit"
+git remote add heroku stem-analytics.herokuapp.com   # or heroku git:remote -a stem-analytics
+git push heroku master
+
+heroku config:unset https://github.com/buildingspeak/conda-buildpack.git
+heroku config:add --app stem-analytics BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
+heroku git:remote -a stem-analytics
+
+heroku config:remove PORT
+heroku config:set PORT=33507
+
+# ========================================== Terminology ===========================================
+# slug: compressed and pre-packaged copy of your application and its dependencies
+# dyno: lightweight Linux container that runs a single user-specified command
+#       - can run any command available in its default environment
+#       - can run in your app's slug
+#
+# scale-out (horizontally): increase number of dynos (if IO bound)
+# scale-up (vertically):    increase processing power of dynos (if CPU bound)
+# ==================================================================================================
+
+____________________________________________________________________________________________________

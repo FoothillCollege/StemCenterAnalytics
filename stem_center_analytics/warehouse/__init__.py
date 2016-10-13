@@ -1,7 +1,9 @@
 """Contains core data storage and their corresponding implementation specific IO functionality.
 
-Notes:
-    - Depends on `stem_analytics.utils`, but NOT on `stem_analytics.core`.
+Notes
+-----
+* Dependency of this package is on `stem_analytics.utils`,
+  but NOT on `stem_analytics.core`.
 """
 from stem_center_analytics.warehouse._data_models import (
     get_student_login_data, get_tutor_request_data,

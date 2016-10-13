@@ -20,8 +20,9 @@ from flask_cors import CORS
 from stem_center_analytics import EXTERNAL_DATASETS_DIR, warehouse
 from stem_center_analytics.utils import os_lib
 
+# NOTE - this web service is a temporary setup, with the data to be replaced by dynamic API calls
+
 # --------------------------------------------------------------------------------------------------
-# NOTE - this web service is a temporary setup, with the data be replaced by dynamic API calls
 # todo: replace static file retrieval with dynamic API calls to stem_center_analytics.CORE_SUBJECTS
 # todo: add more specific error handling + catch dispatching errors (figure out on google, later!)
 # todo: figure out how to cache code/modules (NOT the data) - aka minimize loading times/session(s)
