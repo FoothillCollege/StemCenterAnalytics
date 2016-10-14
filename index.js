@@ -1,4 +1,4 @@
-var coursesFile = 'https://raw.githubusercontent.com/FoothillCollege/StemAnalytics/master/stem_analytics/warehouse/course_records.json?token=AOcnypYf6CWERfmdFNQ69bJMHypkc7EXks5X2vsJwA%3D%3D',
+var coursesFile = 'https://raw.githubusercontent.com/FoothillCollege/StemCenterAnalytics/master/stem_center_analytics/warehouse/course_records.json',
     aboutVisible = false;
 
 $('#time-range').buttonset();
@@ -7,33 +7,33 @@ function showDay() {
     $('#day-picker-DEMO').selectmenu('widget').show();
     $('#week-picker').selectmenu('widget').hide();
     $('#quarter-picker').selectmenu('widget').hide();
-    setCharts($('#day-picker-DEMO').val());
+    setCharts('day', $('#day-picker-DEMO').val());
 }
 
 function showWeek() {
     $('#day-picker-DEMO').selectmenu('widget').hide();
     $('#week-picker').selectmenu('widget').show();
     $('#quarter-picker').selectmenu('widget').hide();
-    setCharts($('#week-picker').val());
+    setCharts('week', $('#week-picker').val());
 }
 
 function showQuarter() {
     $('#day-picker-DEMO').selectmenu('widget').hide();
     $('#week-picker').selectmenu('widget').hide();
     $('#quarter-picker').selectmenu('widget').show();
-    setCharts($('#quarter-picker').val());
+    setCharts('quarter', $('#quarter-picker').val());
 }
 
 // $('#datepicker').datepicker();
 
 $('#day-picker-DEMO').selectmenu({
-    change: function() { setCharts(this.value); }
+    change: function() { setCharts('day', this.value); }
 });
 $('#week-picker').selectmenu({
-    change: function() { setCharts(this.value); }
+    change: function() { setCharts('week', this.value); }
 });
 $('#quarter-picker').selectmenu({
-    change: function() { setCharts(this.value); }
+    change: function() { setCharts('quarter', this.value); }
 });
 
 var demandData = {
@@ -59,32 +59,21 @@ var demandTrendData = {
 };
 
 // Populate charts with data
-function setCharts(statFile) {
+function setCharts(range, timeVal) {
     demandData.labels = [];
     demandData.datasets[0].data = [];
     waitTimeData.labels = [];
     waitTimeData.datasets[0].data = [];
     
-    // Wait for JSON request success before using data
-    /*$.getJSON(statFile, null, function(data) {
-        $.each(data.num_requests, function(label, value) {
-            demandData.labels.push(label);
-            demandData.datasets[0].data.push(value);
-        });
-        $.each(data.wait_time, function(label, value) {
-            waitTimeData.labels.push(label);
-            waitTimeData.datasets[0].data.push(value);
-        });
-        window.demandChart.update();
-        window.waitTimeChart.update();
-    })*/
-    
+    var data = {};
+    data[range] = timeVal;
+    data['courses'] = 'all';
+
     // Use GET request
     $.ajax({
         url: 'https://stem-analytics.herokuapp.com/',
         type: 'get',
-        data: {'quarter':'Summer 2015',
-               'courses':'all'},
+        data: data,
         success: function(data) {
             showError(false);
             $.each(data.num_requests, function(label, value) {
@@ -98,35 +87,6 @@ function setCharts(statFile) {
             /*$.each(data.trend_requests, function(label, value) {
                 demandTrendData
             });*/
-            $.getJSON(data.course_records, null, function(data2) {
-                $.each(data2.ordering, function(index, subject) {
-                    var li = $(document.createElement('li')).appendTo('#courseList');
-                    $(document.createElement('div')).addClass('arrow').appendTo(li);
-                    $(document.createElement('input')).attr({
-                        type: 'checkbox',
-                        value: subject
-                    }).appendTo(li);
-                    $(document.createTextNode(subject)).appendTo(li);
-                    var ul = $(document.createElement('ul')).appendTo(li);
-                    $.each(data2[subject], function(index, course) {
-                        li = $(document.createElement('li')).appendTo(ul);
-                        $(document.createElement('input')).attr({
-                            type: 'checkbox',
-                            value: course
-                        }).appendTo(li);
-                        $(document.createTextNode(course)).appendTo(li);
-                    });
-                })
-                // Make course list expandable
-                $('#courseList').find('li:has(ul)')
-                    .click( function(event) {
-                    if (!$(event.target).is('input')) {
-                        $(this).children('.arrow').toggleClass('expanded');
-                        $(this).children('ul').toggle('fast');
-                    }
-                })
-                .children('ul').hide();
-            })
             window.demandChart.update();
             window.waitTimeChart.update();
             drawHeatmap();
@@ -140,7 +100,7 @@ function setCharts(statFile) {
 }
 
 function resizeHeatmap() {
-    var heatmap = $('#demand-heatmap')
+    var heatmap = $('#demand-heatmap');
     heatmap.width($('#charts-container').width() * 0.97);
     heatmap.height($('#charts-container').width() * 0.25);
 }
@@ -161,8 +121,8 @@ function showError(boolShow, xhr) {
 // Executes after DOM is loaded
 $(document).ready(function() {
     // Generate course list
-    /*$.getJSON(coursesFile, null, function(data) {
-        $.each(data.ordering, function(index, subject) {
+    $.getJSON(coursesFile, null, function(data) {
+        $.each(data.Ordering, function(index, subject) {
             var li = $(document.createElement('li')).appendTo('#courseList');
             $(document.createElement('div')).addClass('arrow').appendTo(li);
             $(document.createElement('input')).attr({
@@ -189,7 +149,7 @@ $(document).ready(function() {
             }
         })
         .children('ul').hide();
-    })*/
+    })
     
     // Render charts
     var demandCtx = document.getElementById('demand-chart').getContext('2d');
