@@ -82,7 +82,7 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
     if interval_type == 'quarter':  # ordering undefined for quarter strings, so sort output...
         return _sort_index_by_list(
             df=aggregated_df,
-            rank_order=input_validation.academic_time_units.quarter_with_year.keys()
+            rank_order=input_validation.TIME_UNIT_VALUES.QUARTERS_WITH_YEARS.keys()
         )
     return aggregated_df
 

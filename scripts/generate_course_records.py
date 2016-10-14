@@ -28,7 +28,7 @@ if __name__ == '__main__':
     core_subject_names = list(input_validation.CORE_SUBJECTS.keys())
     other_subject_names = list(input_validation.OTHER_SUBJECTS.keys())
 
-    subject_map = OrderedDict({'Ordering': core_subject_names + ['Other']})
+    subject_map = OrderedDict({'ordering': core_subject_names + ['Other']})
     for subject_name in core_subject_names:
         df_sliced_by_subj_name = tutor_log[tutor_log['course_subject'] == subject_name]
         course_numbers_for_subject = df_sliced_by_subj_name['course_number'].unique()
