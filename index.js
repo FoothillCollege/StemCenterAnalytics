@@ -1,5 +1,4 @@
-var coursesFile = 'https://raw.githubusercontent.com/FoothillCollege/StemCenterAnalytics/master/stem_center_analytics/warehouse/course_records.json',
-    aboutVisible = false;
+var aboutVisible = false;
 
 $('#time-range').buttonset();
 
@@ -60,11 +59,6 @@ var demandTrendData = {
 
 // Populate charts with data
 function setCharts(range, timeVal) {
-    demandData.labels = [];
-    demandData.datasets[0].data = [];
-    waitTimeData.labels = [];
-    waitTimeData.datasets[0].data = [];
-    
     var data = {};
     data[range] = timeVal;
     data['courses'] = 'all';
@@ -76,6 +70,11 @@ function setCharts(range, timeVal) {
         data: data,
         success: function(data) {
             showError(false);
+            demandData.labels = [];
+            demandData.datasets[0].data = [];
+            waitTimeData.labels = [];
+            waitTimeData.datasets[0].data = [];
+
             $.each(data.num_requests, function(label, value) {
                 demandData.labels.push(label);
                 demandData.datasets[0].data.push(value);
@@ -87,6 +86,7 @@ function setCharts(range, timeVal) {
             /*$.each(data.trend_requests, function(label, value) {
                 demandTrendData
             });*/
+
             window.demandChart.update();
             window.waitTimeChart.update();
             drawHeatmap();
@@ -121,8 +121,9 @@ function showError(boolShow, xhr) {
 // Executes after DOM is loaded
 $(document).ready(function() {
     // Generate course list
+    var coursesFile = 'https://raw.githubusercontent.com/FoothillCollege/StemCenterAnalytics/master/stem_center_analytics/warehouse/course_records.json';
     $.getJSON(coursesFile, null, function(data) {
-        $.each(data.Ordering, function(index, subject) {
+        $.each(data.ordering, function(index, subject) {
             var li = $(document.createElement('li')).appendTo('#courseList');
             $(document.createElement('div')).addClass('arrow').appendTo(li);
             $(document.createElement('input')).attr({
