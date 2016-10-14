@@ -9,7 +9,7 @@ python -m stem_center_analytics.app   # then you can send requests using curl
 # ================================= Commonly Used Project Commands =================================
 #  assumes below creation steps have been taken
 
-# ensure your in local app dir (NOT branch)
+# ensure you're in local app dir (NOT branch)
 heroku open                           # view the app from browser
 
 heroku console                        # to get extra details not present in logs
@@ -28,13 +28,12 @@ cloc ~/Documents/GitHub/StemCenterAnalytics  # count total lines of code in proj
 # in the latter, add nomkl (saves ~100mb!) followed by hard-dependencies w/o version numbers
 # in requirements.txt, add hard package requirements only found on pip (eg: gunicorn)
 
-cd "C:\Users\jperm\Documents\GitHub\StemCenterAnalytics"  # change to project dir
-
+# ensure you're in local app repo
 # create the app, sync conda, and push the changes
 heroku                        # installs if not already (CLI prompts for credentials
 heroku create stem-analytics  # create app (w/ name) so heroku is ready to receive the code
 git push heroku master        # push local's contents to heroku's master branch (deploys app)
-heroku config:add --app stem-analytics BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
+heroku config:add --app stem-center-analytics BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
 
 git remote add heroku "https://stem-center-analytics.herokuapp.com/"  # add remote access id to project
 heroku ps:scale web=1                                                 # ensure only instance is running

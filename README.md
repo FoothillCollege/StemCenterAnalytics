@@ -5,5 +5,5 @@ Although graphs are currently unavailable, view accompanying web-page at:
 http://foothillcollege.github.io/StemCenterAnalytics/
 
 Upon first official release at the end of October, the app will be up and running at:
-http://stem-analytics.herokuapp.com/
+http://stem-center-analytics.herokuapp.com/
 ****************************************************************************************************************
