@@ -71,7 +71,7 @@ function setCharts(range, timeVal) {
 
     // Use GET request
     $.ajax({
-        url: 'https://stem-analytics.herokuapp.com/',
+        url: 'https://stem-center-analytics.herokuapp.com/',
         type: 'get',
         data: data,
         success: function(data) {
