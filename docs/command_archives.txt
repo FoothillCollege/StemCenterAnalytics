@@ -2,9 +2,17 @@
 # author: Jeff Persons
 # note: below works for windows on git-bash, but with paths changed should work anywhere else to
 
+running it from a CLI, locally (NOT through heroku local):
+cd "C:\Users\jperm\Dropbox\StemCenterAnalytics"  # local (NOT branch) app
+python -m stem_center_analytics.app              # then you can send requests using curl
+
 
 # ================================= Commonly Used Project Commands =================================
 #  assumes below creation steps have been taken
+
+# for later cd "C:\Users\jperm\Documents\GitHub\StemCenterAnalytics"
+# for now, stick with the older repo, for prototyping (and before switching to heroku local)
+
 cd "C:\Users\jperm\Documents\GitHub\StemCenterAnalytics"
 heroku open                           # view the app from browser
 

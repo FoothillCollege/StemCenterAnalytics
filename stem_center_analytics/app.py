@@ -3,10 +3,10 @@
 
 Examples
 --------
-To test the web service locally, run the below commands from terminal (ensure debug_mode=True):
-    curl -u jeff:python -i "http://127.0.0.1:5000/?day=2013-09-25&courses=ALL_SUBJECTS"
-    curl -u jeff:python -i "http://127.0.0.1:5000/?week=Fall+2013,Week+1&courses=ALL_SUBJECTS"
-    curl -u jeff:python -i "http://127.0.0.1:5000/?quarter=Fall+2013&courses=ALL_SUBJECTS"
+To test the web service locally, run the below commands from terminal:
+    curl -u jeff:python -i "http://127.0.0.1:5000/?day=2013-09-25&courses=all"
+    curl -u jeff:python -i "http://127.0.0.1:5000/?week=Fall+2013+-+Week+1&courses=all"
+    curl -u jeff:python -i "http://127.0.0.1:5000/?quarter=Fall+2013&courses=all"
 """
 import io
 import json
@@ -64,9 +64,10 @@ def _determine_quarter_by_date(date_string: str) -> str:
 def _parse_request(request_args: flask.Request.args) -> dict:
     """Return parsed args from route as a json response.
 
+    Note: for now, only course=all is permitted.
     Sample query arguments:
         - quarter=Summer+2015&course=math
-        - week=Summer+2015,Week+1&course=math
+        - week=Summer+2015+-+Week+1&course=math
         - day=2015-09-25&course=math
     """
     # ensure query string contains two parameter names: courses, and either day, week, or quarter
@@ -81,21 +82,21 @@ def _parse_request(request_args: flask.Request.args) -> dict:
     time_range_type = arg_names.pop()
 
     # -------------------------------- Additional Inferring Below ----------------------------------
-    # examples: day=2013-09-25 -- week=Fall+2013,Week+1 -- quarter=Fall+2013
+    # examples: day=2013-09-25 -- week=Fall+2013+-+Week+1 -- quarter=Fall+2013
     courses = request_args.get('courses', type=str).split(',')
-
     raw_time_range = request_args.get(time_range_type, type=str).replace('+', ' ')
+    
     if time_range_type == 'day':
         quarter_name, time_range_value = _determine_quarter_by_date(raw_time_range), raw_time_range
     elif time_range_type == 'week':
-        quarter_name, time_range_value = raw_time_range.split(',')
+        quarter_name, time_range_value = raw_time_range.split(' - ')
         time_range_value = time_range_value.replace('Week', '').strip()
     elif time_range_type == 'quarter':
         time_range_value, quarter_name = raw_time_range, raw_time_range
     else:
         raise ValueError('Internal Error.')
     interval_type = RANGE_TO_INTERVAL_MAP[time_range_type]
-    # eg: Fall 2013 day week 1 ['ALL_SUBJECTS']
+    # eg: Fall 2013 day week 1 ['all']
     # print(quarter_name, interval_type, time_range_type, time_range_value, courses)
     return {'quarter': quarter_name,
             'interval': interval_type,
@@ -105,7 +106,7 @@ def _parse_request(request_args: flask.Request.args) -> dict:
 
 def _get_file(quarter: str, time_range_type: str,
               time_range: str, interval: str,
-              courses: Iterable[str]=('ALL_SUBJECTS',)) -> io.TextIOWrapper:
+              courses: Iterable[str]=('all',)) -> io.TextIOWrapper:
     """Return json file corresponding to given data.
 
     Examples
@@ -117,7 +118,7 @@ def _get_file(quarter: str, time_range_type: str,
     _get_file(quarter='Fall+2013', time_range_type='day',
               time_range='2013-09-25', interval='hour'))
     """
-    if courses != 'ALL_SUBJECTS' and courses != ('ALL_SUBJECTS',) and courses != ['ALL_SUBJECTS']:
+    if courses != 'all' and courses != ('all',) and courses != ['all']:
         raise ValueError('No specific courses supported yet.')
     matched_file = os_lib.join_path(
         EXTERNAL_DATASETS_DIR,
