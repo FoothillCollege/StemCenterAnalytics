@@ -29,8 +29,6 @@ from stem_center_analytics.utils import os_lib, io_lib
 from stem_center_analytics.warehouse import get_tutor_request_data
 
 
-# todo: figure out the json isn't serializable error
-
 def _sort_index_by_list(df: pd.DataFrame, rank_order: Iterable[object]) -> pd.DataFrame:
     """Return given DF sorted by given columns according to `rank_order`."""
     # todo: add ability to sort numpy array by list as well, if necessary.
@@ -100,6 +98,7 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
     metric_type: {'demand', 'wait_time'}
         *demand: total number of requests are counted over intervals for given range.
         *wait_time: wait_times are averaged over intervals for given range.
+
     Notes
     -----
     Unlike aggregate sc_data, parameters are parsed.
@@ -117,14 +116,6 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
                               interval_type=interval_type_)
 
 
-def convert_keys_to_strings(dict_: Mapping) -> Mapping:
-    """Convert keys of given dictionary to strings."""
-    new_dict_ = {}
-    for key in dict_:
-        new_dict_[str(key)] = dict_[key]
-    return new_dict_
-
-
 def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: str) -> None:
     """Generate demand and wait-time metrics for various ranges in quarter."""
     def generate_json_demo_data(data_in_range: pd.DataFrame, range_: str, interval_: str) -> None:
@@ -132,10 +123,16 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
         demand = compute_metric_on_intervals(data_in_range, interval_, 'demand').to_dict()
         wait_time = compute_metric_on_intervals(data_in_range, interval_, 'wait_time').to_dict()
 
+        # convert all entries to strings, and round integers by two
         demand_key, wait_time_key = list(demand.keys())[0], list(wait_time.keys())[0]
-        data = {demand_key: convert_keys_to_strings(demand[demand_key]),
-                wait_time_key: convert_keys_to_strings(wait_time[wait_time_key])}
-        print(data)
+        data = {
+            list(demand.keys())[0]:
+                {str(key): str(demand[demand_key][key])
+                 for key in demand[demand_key]},
+            list(wait_time.keys())[0]:
+                {str(key): str(round(wait_time[wait_time_key][key], 2))
+                 for key in wait_time[wait_time_key]}
+        }
         interval_ = 'week' if interval_ == 'week_in_quarter' else interval_
         file_name = 'time_range={}&interval={}.json'.format(range_, interval_)
         io_lib.write_json_file(file_path=os_lib.join_path(output_dir, file_name),

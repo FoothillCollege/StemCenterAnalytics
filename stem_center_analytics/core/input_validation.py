@@ -40,10 +40,12 @@ class ParserDict(OrderedDict):
 
     def __init__(self, *args: Tuple[str, Set[str]]):
         """Creates mappings (1st item in pair str, 2nd item must support membership testing)."""
+        # in case you think the below is performance bloat, %timeit reveals a mere 5 nanosecond
+        # difference (~52 vs ~47 without the validation code) == that's 5 billionths of a second!
         for pair in args:
             message = 'Cannot construct {} object - '.format(self.__class__.__name__)
             if len(pair) != 2 or not isinstance(pair[1], set):
-                raise ValueError(message + 'ALL_SUBJECTS arguments must be of form Tuple[str, set].')
+                raise ValueError(message + 'ParserDict arguments must be of form Tuple[str, set].')
             if not isinstance(pair[0], str):
                 raise ValueError(message + 'keys can contain only contain '
                                            'letters, digits, spaces, and underscores.')
@@ -53,7 +55,7 @@ class ParserDict(OrderedDict):
                                            'letters, digits, spaces, and underscores.')
             if any((not isinstance(s, str) or not s.replace('_', '').replace(' ', '').isalnum())
                    for s in pair[1]):
-                raise ValueError(message + 'ALL_SUBJECTS strings in each set can only contain '
+                raise ValueError(message + 'ParserDict strings in each set can only contain '
                                            'letters, digits, spaces, and underscores.')
         super().__init__(args)
 
