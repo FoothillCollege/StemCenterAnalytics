@@ -71,7 +71,7 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
 
     Notes
     -----
-        Aggregation is ALL_SUBJECTS done on 'wait_time' column, except for counts, in
+        Aggregation is all done on 'wait_time' column, except for counts, in
         which no specific column is needed.
         Parameters are not parsed.
     """

@@ -83,8 +83,8 @@ from stem_center_analytics.interface import TutorLog, LoginData
 
 # todo: build sphinx-api-documentation
 # todo: add automated backups to stem_center_db
-# todo: ensure ALL_SUBJECTS documentation is up to date and cleaned up
-# todo: finish conversion of ALL_SUBJECTS documentation to numpy format
+# todo: ensure all documentation is up to date and cleaned up
+# todo: finish conversion of all documentation to numpy format
 # todo: migrate doctests to a testing package where appropriate - particularly regression tests
 def config_pandas_display_size(max_rows: int=50, max_cols: int=20, max_width: int=500) -> None:
     """Configure Pandas display settings, to allow pretty-printing for console output."""

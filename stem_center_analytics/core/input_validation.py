@@ -178,12 +178,12 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
         * sequence of strings - array-like of strings
         * dashed string - string containing dash
         * delimited string - string containing values separated by commas,
-          or no comma at ALL_SUBJECTS
+          or no comma at all
     mapping_func : one str arg function
         The function in which each string element extracted from `user_input`
         is mapped with.
     values_to_slice : array-like of str, default ()
-        Assumed as either empty, or a list of ALL_SUBJECTS possible mapped values, in
+        Assumed as either empty, or a list of all possible mapped values, in
         which is sliced in the case of a dashed string.
 
     Returns
@@ -356,7 +356,7 @@ def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=False)
     Notes
     -----
     The algorithm goes as follows, for each course name given...:
-    1) Remove ALL_SUBJECTS excess space and convert to lower case
+    1) Remove all excess space and convert to lower case
     2) Breaks string into three components:
         * Subject: substring spanning until first found digit (exclusive)
         * Number: substring spanning from first found digit to space (exclusive)
@@ -367,7 +367,7 @@ def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=False)
         * 0 or o at beginning of course section (eg 01W -> 1)
     4) Maps course subject (eg: abbreviation)
     5) Upper case course number and section
-    6) Check membership in a set of ALL_SUBJECTS possible course combinations,
+    6) Check membership in a set of all possible course combinations,
        as taken from the most recently updated tutor request data.
     7) If present in the records, returns 3 element tuple if `as_tuple`=True,
        else returns string.

@@ -83,7 +83,7 @@ class _SCWrapper(object):
         course_names_ = prs.parse_courses(course_names, as_tuple=True)
         # filter by course gos here . . .
         # sc_data[sc_data['course'].isin(weeks_in_quarter)]
-        # figure it out..complete names, ALL_SUBJECTS 3,etc...
+        # figure it out..complete names, all 3,etc...
         return self
 
     def filter_by_year(self, years: Union[str, Sequence[str]]):
@@ -127,12 +127,12 @@ class _SCWrapper(object):
         return self
 
     def _dump_to_csv(self, dump_all: bool=False) -> None:
-        """Dump ALL_SUBJECTS to a csv file."""
+        """Dump all contents to a csv file."""
         # if dump_all, write all_data, else write 'current' data
         return self
 
     def condense(self):
-        """Condenses internal DataFrame via abbreviation of ALL_SUBJECTS fields/labels/values in df."""
+        """Condenses internal DataFrame via abbreviation of all fields/labels/values in df."""
         return self
 
 

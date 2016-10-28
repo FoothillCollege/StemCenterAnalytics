@@ -37,7 +37,7 @@ def _create_data_path_mappings(dir_path: str, file_names: Iterable[str]) -> Dict
     return file_mappings
 
 
-# in the process of build the mappings, ALL_SUBJECTS files are checked to exist
+# in the process of build the mappings, all files are checked to exist
 _EXTERNAL_DATASETS_PATH_MAP = _create_data_path_mappings(
     dir_path=EXTERNAL_DATASETS_DIR,
     file_names=('unclean_student_logins.csv', 'unclean_tutor_requests.csv')
@@ -54,7 +54,7 @@ def connect_to_stem_center_db() -> sqlite3.Connection:
 
 
 def get_quarter_dates() -> pd.DataFrame:
-    """Return DataFrame of ALL_SUBJECTS (manually entered) quarter start, end dates."""
+    """Return DataFrame of all (manually entered) quarter start, end dates."""
     # fixme: change file_io read flat file to add the below functionality (or get rid of file io!)
     return pd.read_csv(filepath_or_buffer=_INTERNAL_DATASETS_PATH_MAP['quarter_dates'],
                        index_col=0, parse_dates=[1, 2],
@@ -62,7 +62,7 @@ def get_quarter_dates() -> pd.DataFrame:
 
 
 def get_tutor_request_data(as_clean: bool=True) -> pd.DataFrame:
-    """Return DF of ALL_SUBJECTS tutor requests (uncleaned from external csv, cleaned from internal db)."""
+    """Return DF of all tutor requests (uncleaned from external csv, cleaned from internal db)."""
     if as_clean:
         with io_lib.connect_to_db(_INTERNAL_DATASETS_PATH_MAP['stem_center_db']) as con:
             return io_lib.read_database_table_as_df(con, 'tutor_requests')
@@ -71,7 +71,7 @@ def get_tutor_request_data(as_clean: bool=True) -> pd.DataFrame:
 
 
 def get_student_login_data(as_clean: bool=True) -> pd.DataFrame:
-    """Return DF of ALL_SUBJECTS student logins (uncleaned from external csv, cleaned from internal db)."""
+    """Return DF of all student logins (uncleaned from external csv, cleaned from internal db)."""
     # uncomment once student login data is available
     if as_clean:
         with io_lib.connect_to_db(_INTERNAL_DATASETS_PATH_MAP['stem_center_db']) as con:
@@ -86,7 +86,7 @@ def get_course_records() -> Dict[str, List[str]]:
 
 
 def get_set_of_all_courses() -> Set[str]:
-    """Return set of ALL_SUBJECTS courses (ALL_SUBJECTS possible: subject, subject+number, subject+number+section)."""
+    """Return set of all courses (all possible: subject, subject+number, subject+number+section)."""
     df = get_tutor_request_data()
     courses_without_section = df['course_subject'] + ' ' + df['course_number']
     courses_with_section = courses_without_section + ' ' + df['course_section']
