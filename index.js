@@ -63,8 +63,8 @@ function setCharts(range, timeVal, textVal) {
     data[range] = timeVal;
     data['courses'] = 'all';
     
-    document.title = (textVal ? textVal : timeVal) + ' - Foothill College STEM Center Analytics';
-    $('#time-title').text(textVal ? textVal : timeVal);
+    document.title = (textVal || timeVal) + ' - Foothill College STEM Center Analytics';
+    $('#time-title').text(textVal || timeVal);
 
     // Use GET request
     $.ajax({
