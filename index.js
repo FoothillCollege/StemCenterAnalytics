@@ -6,7 +6,7 @@ function showDay() {
     $('#day-picker-DEMO').selectmenu('widget').show();
     $('#week-picker').selectmenu('widget').hide();
     $('#quarter-picker').selectmenu('widget').hide();
-    setCharts('day', $('#day-picker-DEMO').val());
+    setCharts('day', $('#day-picker-DEMO').val(), $('#day-picker-DEMO :selected').text());
 }
 
 function showWeek() {
@@ -26,7 +26,7 @@ function showQuarter() {
 // $('#datepicker').datepicker();
 
 $('#day-picker-DEMO').selectmenu({
-    change: function() { setCharts('day', this.value); }
+    change: function() { setCharts('day', this.value, $('#day-picker-DEMO :selected').text()); }
 });
 $('#week-picker').selectmenu({
     change: function() { setCharts('week', this.value); }
@@ -58,10 +58,13 @@ var demandTrendData = {
 };
 
 // Populate charts with data
-function setCharts(range, timeVal) {
+function setCharts(range, timeVal, textVal) {
     var data = {};
     data[range] = timeVal;
     data['courses'] = 'all';
+    
+    document.title = (textVal ? textVal : timeVal) + ' - Foothill College STEM Center Analytics';
+    $('#time-title').text(textVal ? textVal : timeVal);
 
     // Use GET request
     $.ajax({
