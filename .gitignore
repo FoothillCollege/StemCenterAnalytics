@@ -1,4 +1,4 @@
-# Editor temporary/working/backup files #
+# editor temporary/working/backup files
 .#*
 *\#*\#
 [#]*#
@@ -16,13 +16,13 @@
 *.idea
 .dst
 
-# Byte-compiled / optimized / DLL files
+# byte-compiled/optimized/DLL files
 __pycache__/
 *.pyc
 *.pyo
 
 
-# Distribution / packaging
+# distribution/packaging
 bin/
 build/
 develop-eggs/
@@ -38,12 +38,12 @@ var/
 *.egg
 
 
-# Installer logs
+# installer logs
 pip-log.txt
 pip-delete-this-directory.txt
 
 
-# Unit test / coverage reports
+# Unit-test/coverage-reports
 /tests/
 .tox/
 .coverage
@@ -52,12 +52,15 @@ nosetests.xml
 coverage.xml
 
 
-# Sphinx documentation
+# sphinx's build documentation
 docs/_build/
 
-# Mac Specific:
-.DS_Store
+# exclude private settings from public repo
+# however, for deployment to the heroku repo, use this by overriding with a forced add
+/dev_settings.py
 
+# Mac Specific
+.DS_Store
 
 # misc
 *.xml

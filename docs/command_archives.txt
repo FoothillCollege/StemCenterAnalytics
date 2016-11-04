@@ -14,6 +14,7 @@ heroku open                           # view the app from browser
 
 heroku console                        # to get extra details not present in logs
 heroku logs --tail                    # view logs (Control+C to exit log streaming)
+# todo: add the more complete instructions here, after deployment/etc is done...
 git push heroku master
 
 heroku restart

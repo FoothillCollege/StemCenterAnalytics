@@ -73,11 +73,14 @@ def get_tutor_request_data(as_clean: bool=True) -> pd.DataFrame:
 def get_student_login_data(as_clean: bool=True) -> pd.DataFrame:
     """Return DF of all student logins (uncleaned from external csv, cleaned from internal db)."""
     # uncomment once student login data is available
+    '''
     if as_clean:
         with io_lib.connect_to_db(_INTERNAL_DATASETS_PATH_MAP['stem_center_db']) as con:
             return io_lib.read_database_table_as_df(con, 'student_logins')
     # otherwise read the student logins in from csv
     return io_lib.read_flat_file_as_df(_EXTERNAL_DATASETS_PATH_MAP['unclean_student_logins'])
+    '''
+    pass
 
 
 def get_course_records() -> Dict[str, List[str]]:

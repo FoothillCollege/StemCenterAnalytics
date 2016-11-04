@@ -51,6 +51,7 @@ class _SCWrapper(object):
 
     def __init__(self, df: pd.DataFrame):
         self._entire_df = df
+        print(self._entire_df)
         self.data = df   # allows mutability  -- saves the current 'filtered' state
 
     def __repr__(self):
@@ -141,7 +142,7 @@ class TutorLog(_SCWrapper):
     """Extended version of SCData for tutor_log."""
 
     def __init__(self):
-        super().__init__(_data_models.get_student_login_data(as_clean=True))
+        super().__init__(_data_models.get_tutor_request_data(as_clean=True))
 
 
 class LoginData(_SCWrapper):
@@ -149,9 +150,9 @@ class LoginData(_SCWrapper):
     """Extended version of SCData for login_data."""
 
     def __init__(self):
-        super().__init__(_data_models.get_tutor_request_data(as_clean=True))
+        super().__init__(_data_models.get_student_login_data(as_clean=True))
 
 
 if __name__ == '__main__':
     tlog = TutorLog()
-    print(tlog)
+    print(tlog.all_data)

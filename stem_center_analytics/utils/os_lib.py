@@ -22,45 +22,9 @@ import errno
 import shutil
 import inspect
 import importlib
-import contextlib
-from typing import Iterable
-
-# todo: add ability to suppress errors in all the remove item code, with arg `ignore_errors`=False
-
-
 import functools
 import contextlib
-
-
-# figure out how to do with exception passed
-def suppress_errors(ignore_errors):
-    """
-
-    Examples
-    --------
-    @suppress_errors(False)
-    def g(): raise ValueError('Error!')  # raises
-
-    @suppress_errors(True)
-    def f(): raise ValueError('Error!')  # raises nothing
-    """
-    def actual_decorator(func):
-        # where func is the decoratored function
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            if not ignore_errors:
-                return func(*args, **kwargs)
-            with contextlib.suppress(Exception):
-                return func(*args, **kwargs)
-        return wrapper
-    
-    try:
-        return actual_decorator
-    except Exception as e:
-        if ignore_errors:
-            raise e from None
-        else:
-            raise e
+from typing import Iterable
 
 
 def is_existent_file(file_path: str) -> bool:
