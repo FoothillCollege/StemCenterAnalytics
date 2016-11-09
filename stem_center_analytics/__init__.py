@@ -62,7 +62,7 @@ pd.set_option('display.width', 500)
 
 SOURCE_DIR = stem_center_analytics.utils.os_lib.get_path_of_python_source(modules[__name__])
 PROJECT_DIR = stem_center_analytics.utils.os_lib.get_parent_dir(SOURCE_DIR)
-
+SCRIPT_DIR = stem_center_analytics.utils.os_lib.join_path(PROJECT_DIR, 'scripts')
 INTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(SOURCE_DIR, 'warehouse')
 EXTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(PROJECT_DIR, 'external_datasets')
 
