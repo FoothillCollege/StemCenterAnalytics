@@ -48,7 +48,6 @@ git add .
 git commit -m "Heroku commit"
 git remote add heroku stem-center-analytics.herokuapp.com
 # or heroku git:remote -a stem-center-analytics
-
 git push heroku master
 
 heroku config:unset https://github.com/buildingspeak/conda-buildpack.git
