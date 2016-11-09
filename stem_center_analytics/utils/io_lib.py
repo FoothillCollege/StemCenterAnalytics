@@ -1,9 +1,7 @@
 """Collection of I/O Database functionality."""
 import json
 import errno
-import email
 import codecs
-import imaplib
 import sqlite3
 import contextlib
 from typing import List, Any
@@ -20,7 +18,7 @@ def connect_to_db(db_path: str) -> sqlite3.Connection:
     Notes
     -----
     * If file wasn't present, this function will NOT create the file,
-      in contrast to sqlite3.connect_to_imap_server(db_path) (which creates file almost always).
+      in contrast to sqlite3.connect(db_path) (which creates file almost always).
     """
     db_path_ = os_lib.normalize_path(db_path)
     db_existed_before_connection = os_lib.is_existent_file(db_path_)
@@ -220,34 +218,4 @@ def write_df_to_flat_file(file_path: str, df: pd.DataFrame, replace_if_exists: b
         return df_to_file_mappings[os_lib.get_extension(file_path)]()  # call corresponding writer
 
 
-def connect_to_imap_server(server_host: str, user_name: str,
-                           user_password: str) -> imaplib.IMAP4_SSL:
-    """Connect to an IMAP server - note, the server must have app security settings lowered."""
-    # note: use con.uid for dealing with unique email ids (like in this project), and
-    # put the command (eg STORE) in quotes as the first argument like con.uid('STORE', ...)
-    # instead of con.store(..), in the case of a non unique (sequential) id
-    # todo: add further docs, detailing assumptions, requirements, imap, gmail, etc.
-    connection_client = imaplib.IMAP4_SSL(server_host)
-    connection_client.login(user_name, user_password)
-    connection_client.select()
-    return connection_client
-
-
-def download_email_attachment(imap_connection: imaplib.IMAP4_SSL, email_uid: str,
-                              output_dir: str) -> None:
-    """Download all attachment files for a given unique email id."""
-    # todo: add further docs, detailing assumptions, requirements, imap, gmail, etc.
-    email_body = imap_connection.uid('FETCH', email_uid, '(RFC822)')[1][0][1]  # read the message
-    message = email.message_from_bytes(email_body)
-    for part in message.walk():
-        if part.get_content_maintype() != 'MULTIPART' and part.get('CONTENT-DISPOSITION'):
-            with open(os_lib.join_path(output_dir, part.get_filename()), 'wb') as output_file:
-                output_file.write(part.get_payload(decode=True))
-
-
-def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL) -> List[str]:
-    """Return list of unique ids from newest to oldest."""
-    return imap_connection.uid('SEARCH', None, 'UNSEEN')[1][0].split()
-
 # todo: modify sql related functions to handle empty dataframes..
-
