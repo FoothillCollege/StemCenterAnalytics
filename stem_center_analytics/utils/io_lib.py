@@ -1,4 +1,9 @@
-"""Collection of I/O Database functionality."""
+"""Collection of I/O Database functionality.
+
+Notes
+-----
+Minimal usage of neighboring functions in this module reduce call-stack complexity.
+"""
 import json
 import errno
 import email
@@ -6,7 +11,7 @@ import codecs
 import imaplib
 import sqlite3
 import contextlib
-from typing import List, Any
+from typing import Iterable, List, Any
 
 import pandas as pd
 
@@ -233,21 +238,32 @@ def connect_to_imap_server(server_host: str, user_name: str,
     return connection_client
 
 
-def download_email_attachment(imap_connection: imaplib.IMAP4_SSL, email_uid: str,
-                              output_dir: str) -> None:
-    """Download all attachment files for a given unique email id."""
+def download_all_email_attachments(imap_connection: imaplib.IMAP4_SSL, email_uid: str,
+                                   output_dir: str) -> List[str]:
+    """Download all attachment files for a given unique email id.
+
+    returns downloaded file paths, whether the download(s) were successful or not.
+    """
     # todo: add further docs, detailing assumptions, requirements, imap, gmail, etc.
+    file_paths = []
     email_body = imap_connection.uid('FETCH', email_uid, '(RFC822)')[1][0][1]  # read the message
     message = email.message_from_bytes(email_body)
     for part in message.walk():
         if part.get_content_maintype() != 'MULTIPART' and part.get('CONTENT-DISPOSITION'):
-            with open(os_lib.join_path(output_dir, part.get_filename()), 'wb') as output_file:
+            file_path = os_lib.join_path(output_dir, part.get_filename())
+            file_paths.append(file_path)
+            with open(file_path, 'wb') as output_file:
                 output_file.write(part.get_payload(decode=True))
+    return file_paths
 
 
-def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL) -> List[str]:
-    """Return list of unique ids from newest to oldest."""
-    return imap_connection.uid('SEARCH', None, 'UNSEEN')[1][0].split()
+def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL, sender: str='',
+                          subject: str='') -> List[str]:
+    """Return list of unique ids from newest to oldest matching given sender and subject."""
+    sender_ = 'FROM ' + sender if sender else None
+    subject_ = 'SUBJECT ' + subject if subject else None
+    email_uid = imap_connection.uid('SEARCH', sender_, subject_, 'UNSEEN')[1][0].split()
+    return email_uid
 
-# todo: modify sql related functions to handle empty dataframes..
 
+# todo: modify sql related functions to handle empty dataframes...
