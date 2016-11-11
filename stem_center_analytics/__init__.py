@@ -66,7 +66,6 @@ SCRIPT_DIR = stem_center_analytics.utils.os_lib.join_path(PROJECT_DIR, 'scripts'
 INTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(SOURCE_DIR, 'warehouse')
 EXTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(PROJECT_DIR, 'external_datasets')
 
-
 # let user know if any CORE_SUBJECTS dependencies or stem_center_analytics packages are missing
 # this allows us to catch import errors early on, rather than upon use of specific modules.
 stem_center_analytics.utils.os_lib.ensure_successful_imports(names=('pandas', 'flask', 'numpy', 'cython'))
@@ -163,3 +162,13 @@ def config_pandas_display_size(max_rows: int=50, max_cols: int=20, max_width: in
 # 6) otherwise, write the cleaned csv to the database, rolling-back and logging if db error
 # 7) once in, log the changes to the databases (as done in io_lib.write_df_to_database)
 # 8) write the subject list to a file, rolling back and logging if error
+
+
+# --------------------------------------------------------------------------------------------------
+# TODO: ASK BITA for help on why git doesn't work when I version the current project/move it/etc
+# ...aka, figure out why the code works
+# I tried resetting git, invalidating caches/restarting, reinitializing, different locations, etc.,
+# but nothing works (gives head error, etc).
+
+# This needs to be figured out so I don't have the extra task of copying/pasting/etc
+# the existing local copy EVERY time!

@@ -57,7 +57,7 @@ docs/_build/
 
 # exclude private settings from public repo
 # however, for deployment to the heroku repo, use this by overriding with a forced add
-/dev_settings.py
+dev_settings.py
 
 # Mac Specific
 .DS_Store

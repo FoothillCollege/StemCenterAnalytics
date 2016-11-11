@@ -42,12 +42,17 @@ heroku config:set PORT=33507                                          # set flas
 heroku restart
 
 
+# ====================================== Easy Head Deletion ========================================
+# note: only do this if you have the last n commits to heroku...otherwise you have to do branch/merge/etc..
+git reset <commit_id>
+git push origin -f
+
 # ====================================== Emergency App Reset =======================================
+
 git init
-git add .
 git commit -m "Heroku commit"
-git remote add heroku stem-center-analytics.herokuapp.com
-# or heroku git:remote -a stem-center-analytics
+heroku git:remote -a stem-center-analytics
+# or git remote add heroku stem-center-analytics.herokuapp.com
 git push heroku master
 
 heroku config:unset https://github.com/buildingspeak/conda-buildpack.git
