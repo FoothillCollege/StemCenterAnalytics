@@ -22,7 +22,6 @@ import errno
 import shutil
 import inspect
 import importlib
-import functools
 import contextlib
 from typing import Iterable
 
@@ -110,18 +109,21 @@ def create_directory(dir_path: str) -> None:
             raise e from None
 
 
-def remove_directory(dir_path: str) -> None:
-    """Remove directory"""
-    dir_path_ = os.path.normpath(dir_path.strip(' '))
-    ensure_directory_exists(dir_path_)
-    shutil.rmtree(os.path.normpath(dir_path.strip(' ')), ignore_errors=True)
+def remove_directory(dir_path: str, ignore_errors=True) -> None:
+    """Remove directory at given path, ignoring OSErrors by default."""
+    error_type = OSError if ignore_errors else ()
+    with contextlib.suppress(error_type):
+        dir_path_ = os.path.normpath(dir_path.strip(' '))
+        ensure_directory_exists(dir_path_)
+        shutil.rmtree(os.path.normpath(dir_path.strip(' ')), ignore_errors)
 
 
-def remove_file(file_path: str) -> None:
-    """Attempt to remove file, silently (suppress errors)."""
-    with contextlib.suppress(OSError):
+def remove_file(file_path: str, ignore_errors=True) -> None:
+    """Remove file at given path, ignoring OSErrors by default."""
+    error_type = OSError if ignore_errors else ()
+    with contextlib.suppress(error_type):
         file_path_ = os.path.normpath(file_path.strip(' '))
-        if not os.path.isfile(file_path_):
+        if not os.path.isfile(file_path_) and not ignore_errors:
             raise FileNotFoundError(errno.ENOENT, 'No such file', file_path_)
         os.remove(file_path_)
 
