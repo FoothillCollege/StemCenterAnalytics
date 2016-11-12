@@ -160,7 +160,8 @@ OTHER_SUBJECTS = ParserDict(
     ('Business',                {'bus', 'busi', 'business'}),
     ('Economics',               {'eco', 'econ', 'economics'}),
     ('Non Credit Basic Skills', {'non', 'ncbs', 'non credit basic skills'}),
-    ('Psychology',              {'psy', 'psyc', 'psych', 'psychology'})
+    ('Psychology',              {'psy', 'psyc', 'psych', 'psychology'}),
+    ('English',                 {'engl', 'english'})
 )
 ALL_SUBJECTS = ParserDict(
     *(list(CORE_SUBJECTS.items()) + list(OTHER_SUBJECTS.items()))
@@ -326,8 +327,8 @@ def parse_years(years: Union[Union[str, int], Sequence[Union[str, int]]]) -> Lis
                        values_to_slice=TIME_UNIT_VALUES.YEARS.keys())
 
 
-def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=False) \
-        -> List[Union[str, Tuple[str, str, str]]]:
+def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=True,
+                  check_records: bool=False) -> List[Union[str, Tuple[str, str, str]]]:
     """Parse course input to list of cleaned components or course names.
 
     Parameters
@@ -337,8 +338,10 @@ def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=False)
         * subject, required: type of course subject (eg math)
         * number, optional: course code (eg 1A)
         * section, optional: course section number (eg 01)
-    as_tuple : bool, default False
+    as_tuple : bool, default True
         Determines whether each parsed course name should be broken up or not
+    check_records : bool, default False
+        Determines whether each parsed course should be checked in the course records
 
     Returns
     -------
@@ -391,7 +394,7 @@ def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=False)
     >>> parse_courses('cs 1a,phys 4c,mat 2a, Comp Sci 1B')
     ['Computer Science 1A', 'Physics 4C', 'Mathematics 2A', 'Computer Science 1B']
     """
-    # todo: add support to return the three component tuple as three parallel lists instead
+    # todo: make this function shorter, more compact, less redundant...
     def parse_full_course_name(course_name: str):
         course_name_ = ' '.join(course_name.split()).lower()
         first_digit_position = next((k for k, char in enumerate(course_name_) if char.isdigit()), -1)
@@ -405,6 +408,10 @@ def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=False)
         subject = re.sub('(\. f|\.| f)?$', '', subject)  # remove trailing '.', ' f', '. f'
         number = re.sub('^0{,2}|(\.)?$', '', number)  # remove up to 3 leading 0s and 1 trailing '.'
         section = re.sub('^0|o', '', section)  # remove leading occurrence of o or 0
+        if not check_records:
+            subject_ = ALL_SUBJECTS.map_to_token(subject)  # let it raise
+            return (subject_, number, section) if as_tuple else ' '.join([subject_, number, section]).strip(' ')
+
         try:
             subject = ALL_SUBJECTS.map_to_token(subject)
             if subject not in SET_OF_ALL_COURSES:
