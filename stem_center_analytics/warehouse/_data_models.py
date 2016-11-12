@@ -85,7 +85,7 @@ def get_student_login_data(as_clean: bool=True) -> pd.DataFrame:
 
 def get_course_records() -> Dict[str, List[str]]:
     """Return course records (from json file) as a dict of lists."""
-    io_lib.read_json_file(file_path=_INTERNAL_DATASETS_PATH_MAP['course_records'])
+    return io_lib.read_json_file(file_path=_INTERNAL_DATASETS_PATH_MAP['course_records'])
 
 
 def get_set_of_all_courses() -> Set[str]:
