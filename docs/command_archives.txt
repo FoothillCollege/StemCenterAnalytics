@@ -32,11 +32,11 @@ cloc ~/Documents/GitHub/StemCenterAnalytics  # count total lines of code in proj
 # ensure you're in local app repo
 # create the app, sync conda, and push the changes
 heroku                        # installs if not already (CLI prompts for credentials
-heroku create stem-analytics  # create app (w/ name) so heroku is ready to receive the code
+heroku create stem-center-analytics  # create app (w/ name) so heroku is ready to receive the code
+heroku config:add BUILDPACK_URL=https://github.com/arose13/conda-buildpack.git
 git push heroku master        # push local's contents to heroku's master branch (deploys app)
-heroku config:add --app stem-center-analytics BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
 
-git remote add heroku "https://stem-center-analytics.herokuapp.com/"  # add remote access id to project
+git remote add heroku "https://stem-analytics.herokuapp.com/"         # add remote access id to project
 heroku ps:scale web=1                                                 # ensure only instance is running
 heroku config:set PORT=33507                                          # set flask specific port
 heroku restart
@@ -48,19 +48,26 @@ git reset <commit_id>
 git push origin -f
 
 # ====================================== Emergency App Reset =======================================
+# to clean slug/build cache on heroku server:
+heroku plugins:install https://github.com/heroku/heroku-repo.git
+heroku repo:gc
+heroku repo:purge_cache
+
+heroku config:add BUILDPACK_URL=https://github.com/arose13/conda-buildpack.git
+heroku git:remote -a stem-center-analytics
+
+heroku config:remove PORT
+heroku config:set PORT=33507
 
 git init
+git add .
 git commit -m "Heroku commit"
 heroku git:remote -a stem-center-analytics
 # or git remote add heroku stem-center-analytics.herokuapp.com
 git push heroku master
 
-heroku config:unset https://github.com/buildingspeak/conda-buildpack.git
-heroku config:add --app stem-center-analytics BUILDPACK_URL=https://github.com/buildingspeak/conda-buildpack.git
-heroku git:remote -a stem-center-analytics
-
-heroku config:remove PORT
-heroku config:set PORT=33507
+heroku repo:gc
+heroku repo:purge_cache
 
 # ========================================== Terminology ===========================================
 # slug: compressed and pre-packaged copy of your application and its dependencies
@@ -73,8 +80,5 @@ heroku config:set PORT=33507
 # ==================================================================================================
 
 # ============================================= Misc ===============================================
-# to clean slug/build cache on heroku server:
-heroku plugins:install https://github.com/heroku/heroku-repo.git
-heroku repo:gc
-heroku repo:purge_cache
+
 ____________________________________________________________________________________________________
