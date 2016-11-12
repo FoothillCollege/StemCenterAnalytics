@@ -47,17 +47,13 @@ Notes:
 """
 from sys import modules
 
-import pandas as pd
+import pandas
 
 import stem_center_analytics.utils.os_lib
 
 __author__ = 'Jeff'
 __version__ = '1.3.0'
 __all__ = ('utils', 'warehouse', 'core', 'interface')
-
-pd.set_option('display.max_rows', 50)
-pd.set_option('display.max_columns', 20)
-pd.set_option('display.width', 500)
 
 
 SOURCE_DIR = stem_center_analytics.utils.os_lib.get_path_of_python_source(modules[__name__])
@@ -67,7 +63,7 @@ INTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(SOURCE_DIR,
 EXTERNAL_DATASETS_DIR = stem_center_analytics.utils.os_lib.join_path(PROJECT_DIR, 'external_datasets')
 
 # let user know if any CORE_SUBJECTS dependencies or stem_center_analytics packages are missing
-# this allows us to catch import errors early on, rather than upon use of specific modules.
+# this allows us to catch import errors early on, rather than upon use of specific modules
 stem_center_analytics.utils.os_lib.ensure_successful_imports(names=('pandas', 'flask', 'numpy', 'cython'))
 
 # fixme: figure out why below fails on heroku deploy but not here
@@ -81,10 +77,11 @@ from stem_center_analytics.interface import TutorLog, LoginData
 
 def config_pandas_display_size(max_rows: int=50, max_cols: int=20, max_width: int=500) -> None:
     """Configure Pandas display settings, to allow pretty-printing for console output."""
-    pd.set_option('display.max_rows', max_rows)
-    pd.set_option('display.max_columns', max_cols)
-    pd.set_option('display.width', max_width)
+    pandas.set_option('display.max_rows', max_rows)
+    pandas.set_option('display.max_columns', max_cols)
+    pandas.set_option('display.width', max_width)
 
+config_pandas_display_size()
 
 # group 1: build the deployment pipeline
 # todo: separate private settings (email passwords, etc), into public repo excluded files
