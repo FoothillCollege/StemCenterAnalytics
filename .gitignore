@@ -14,6 +14,8 @@
 .pycharmproject
 .settings
 *.idea
+\.idea\*
+\*.idea
 .dst
 
 # byte-compiled/optimized/DLL files
@@ -61,6 +63,3 @@ dev_settings.py
 
 # Mac Specific
 .DS_Store
-
-# misc
-*.xml

@@ -1,3 +1,4 @@
+@@ -1,15 +0,0 @@
 # exclusion of files unnecessary to running web app on heroku (reduces slug size)
 # these files/folders are ignored provide a further filter AFTER gitignore
 
