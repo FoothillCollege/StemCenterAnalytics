@@ -2,7 +2,7 @@
 
 Notes
 -----
-Minimal usage of neighboring functions in this module reduce call-stack complexity.
+* Minimal usage of neighboring functions in this module reduce call-stack complexity.
 """
 import json
 import errno
@@ -10,68 +10,114 @@ import email
 import codecs
 import imaplib
 import sqlite3
-import contextlib
-from typing import Iterable, List, Any
+from functools import partial
+from typing import Iterable, Sequence, Union, List, Any
 
 import pandas as pd
 
 from stem_center_analytics.utils import os_lib
 
 
-@contextlib.contextmanager
 def connect_to_db(db_path: str) -> sqlite3.Connection:
-    """Handles sqlite3 connection at given path fails if invalid/non-existent path.
+    """Return sqlite3 connection at given path.
+
+    Parameters
+    ----------
+    db_path : str
+        File path to sqlite database
+
+    Return
+    ------
+    `sqlite3.Connection`
+        sqlite connection to database located at given path
+
+    Raises
+    ------
+    ConnectionRefusedError
+        * If database file is not a sqlite corrupt or does not exist
+        * If `sqlite3.Connection` object instantiation fails
 
     Notes
     -----
     * If file wasn't present, this function will NOT create the file,
-      in contrast to sqlite3.connect_to_imap_server(db_path) (which creates file almost always).
+      in contrast to sqlite3.connect(db_path), which creates file almost always
     """
     db_path_ = os_lib.normalize_path(db_path)
     db_existed_before_connection = os_lib.is_existent_file(db_path_)
+
+    # in the case of a corrupt or non-existent sqlite file,
+    # re-raise as ConnectionRefusedError and remove db file if created during failed connection
     try:
-        ensure_sql_file_exists_and_is_not_corrupt(db_path_)
-        yield sqlite3.connect(db_path_)             # may raise in specific, rare cases
+        ensure_valid_sqlite_file(db_path_)
+        return sqlite3.Connection(db_path_)
     except Exception:
-        if not db_existed_before_connection:        # if db file wasn't present before connection
-            os_lib.remove_file(db_path_)  # remove faultily auto-created file if exists
+        if not db_existed_before_connection:
+            os_lib.remove_file(db_path_)
         raise ConnectionRefusedError(errno.ECONNREFUSED,
-                                     '\'{}\' cannot be reached'.format(os_lib.get_basename(db_path)))
+                                     'SQLite file \'{}\' cannot be reached'
+                                     .format(os_lib.get_basename(db_path)))
 
 
-def read_database_table_as_df(con: sqlite3.Connection, table_name: str,
-                              datetime_format: str=None) -> pd.DataFrame:
-    """Retrieve table of given name from database as a df."""
-    index_name = select_column_names(con, table_name)[0]
-    return pd.read_sql(sql='SELECT * FROM ' + table_name, con=con, index_col=index_name,
-                       parse_dates={index_name: datetime_format})
+def read_database_table_as_df(con: sqlite3.Connection, table_name: str, columns: Sequence[str]=(),
+                              date_columns: Sequence[str]=()) -> pd.DataFrame:
+    """Retrieve table of given name from database as a df.
+
+    Infers first column as index.
+    columns: subset of columns to retrieve
+    parse_dates: mapping of column names to inferred datetime formats
+    """
+    index = select_column_names(con, table_name)[0]
+    print(index)
+    ensure_table_is_in_database(con, table_name)
+    return pd.read_sql(sql='SELECT * FROM ' + table_name, con=con, index_col=index,
+                       parse_dates=date_columns, columns=columns)
 
 
 def write_df_to_database(con: sqlite3.Connection, df: pd.DataFrame,
-                         new_table_name: str, if_exists: str='fail') -> None:
-    """Write contents of DataFrame to sql.
+                         table_name: str, if_exists: str='fail') -> None:
+    """Write contents of DataFrame to sqlite table.
+
+    Parameters
+    ----------
+    con : sqlite3.Connection
+        Database connection object for sqlite3
+    df : pd.DataFrame
+        DataFrame to write to sql table
+    table_name : str
+        Name of table to update or create
+    if_exists : str of {'fail', 'replace', 'append'}, default 'fail'
+        * fail: if table exists, do nothing else create table
+        * replace: if table exists drop it and recreate table else create table
+        * append: if table exists, insert at end of table, else do nothing
 
     Notes
     -----
-    action_if_exists : {'fail', 'replace', 'append'}, default='fail'.
+    * `if_exists` options do not raise any errors, rather they dictate the
+      corresponding message that is logged/printed to console
+    * Action taken and total number of row changes are logged accordingly
+    * Note that `if_exists` options follow different semantics than the
+      parameter of the same name in the method `DataFrame.to_sql`
     """
-    normalized_name = new_table_name.replace('-', '').replace(' ', '').replace('_', '')
+    normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
     if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
         raise ValueError('Given table name \'{}\' is invalid - only letters, digits, spaces,'
-                         ' dashes, and underscores are allowed.'.format(new_table_name))
+                         ' dashes, and underscores are allowed.'.format(table_name))
 
-    table_is_in_db = is_table_in_database(con, new_table_name)
+    table_is_in_db = is_table_in_database(con, table_name)
     actions = ('fail', 'append', 'replace')
     if if_exists not in actions:
         raise ValueError('`action_if_exists` must be in {\'fail\', \'replace\', \'append\'}.')
+    if if_exists == 'append':
+        ensure_table_is_in_database(con, 'tutor_requests')
+
     try:
-        df.to_sql(name=new_table_name, con=con, if_exists=if_exists)
+        df.to_sql(name=table_name, con=con, if_exists=if_exists)
     except Exception as e:
         if isinstance(e, ValueError):  # catch if_exists='fail' exception
             pass
         else:
-            raise IOError('Internal error: DataFrame could not be imported to database'
-                          'present at \'{}\'.'.format(con)) from None
+            raise IOError('DataFrame failed to be imported as table \'{}\' in the database '
+                          'present at \'{}\'.'.format(table_name, con))
 
     # generate a report for the database update
     deciding_factors = (if_exists, table_is_in_db)
@@ -79,58 +125,79 @@ def write_df_to_database(con: sqlite3.Connection, df: pd.DataFrame,
         ('fail', True): 'Table \'{}\' cannot be created - if_exists=\'fail\'',
         ('fail', False): 'Table \'{}\' successfully created',
         ('append', True): 'Table \'{}\' successfully appended to',
-        ('append', False): 'Cannot append to non-existent table \'{}\' - created instead',
+        ('append', False): 'Cannot append to non-existent table \'{}\' - append failed',
         ('replace', True): 'Table \'{}\' successfully replaced',
         ('replace', False): 'Cannot replace non-existent table \'{}\' - created instead'
     }
-    outcome = outcomes[deciding_factors].format(new_table_name)
+    outcome = outcomes[deciding_factors].format(table_name)
     print('\nLatest changes to db @ {}...'
           '\n   {} ({:,} row changes).'
           .format(con, outcome, con.total_changes))
 
 
 def create_sql_file(sql_file_path: str, replace_if_exists: bool=False) -> None:
-    """Create SQL file if path doesn't exist in existent directory, and connection is successful."""
-    sql_path_ = os_lib.normalize_path(sql_file_path)
-    if os_lib.get_basename(sql_path_, with_ext=True) == sql_path_:  # if only basename given, raise
-        raise ValueError('Valid file\'s are considered only with explicit file path.')
-    if replace_if_exists:
-        os_lib.remove_file(sql_path_)
+    """Create SQL file if path is available and connection is successful."""
+    sql_file_path_ = os_lib.normalize_path(sql_file_path)
+    os_lib.ensure_path_is_absolute(sql_file_path_)
+    file_exists_before_creation = os_lib.is_existent_file(sql_file_path_)
 
-    os_lib.ensure_file_is_creatable(sql_path_, valid_file_types=['sql'])
+    if file_exists_before_creation and replace_if_exists:
+        os_lib.remove_file(sql_file_path_, ignore_errors=False)
+
+    os_lib.ensure_file_is_creatable(sql_file_path_, valid_file_types=['sql'])
     try:
-        sqlite3.connect(sql_path_)  # establish file path
-        connect_to_db(sql_path_)
-        ensure_sql_file_exists_and_is_not_corrupt(sql_path_)
+        sqlite3.connect(sql_file_path_)  # establish file path
+        connect_to_db(sql_file_path_)
+        ensure_valid_sqlite_file(sql_file_path_)
     except:
-        os_lib.remove_file(sql_path_)  # remove faultily auto-created file if exists
-        raise ValueError('Cannot create sql file - '
+        os_lib.remove_file(sql_file_path_)  # remove faultily auto-created file if exists
+        raise ValueError('Cannot create database - '
                          'valid connection to \'{}\' cannot be established.'
-                         .format(sql_path_))
+                         .format(sql_file_path_))
+
+    # generate a report for the database update
+    action_taken = 'replaced' if file_exists_before_creation else 'created'
+    print('Database \'{}\' was successfully {}.'.format(os_lib.get_basename(sql_file_path), action_taken))
 
 
-def ensure_sql_file_exists_and_is_not_corrupt(sql_file_path: str) -> None:
-    """Raise if invalid new path, else raise if invalid existent file.
+def ensure_valid_sqlite_file(sql_file_path: str) -> None:
+    """Ensure absolute path to an existing, non-corrupt SQLite file.
 
-    Notes
-    -----
-    * Valid creatable file: available sql file path in an existing directory.
-    * Valid existent file: existing, non-corrupt, recognizable SQL file.
+    Path is considered valid - and thus no errors are raised - if absolute
+    path with .sql extension, leading to a UTF-8 encoded SQLite file.
+
+    Parameters
+    ----------
+    sql_file_path : str
+        Absolute file path to a SQLite database
+
+    Raises
+    ------
+    ValueError
+        * If only file name is given, since absolute file paths are required
+        * If file name does not end with a single .sql extension
+    FileNotFoundError
+        * If file does not exist
+    OSError
+        * If file at path is corrupt or cannot be recognized as a SQLite file,
+          as determined by it's header string
+    UnicodeError
+        * If file is not encoded with UTF-8
 
     References
     ----------
-    For more details on method used to determine corruption/validity of sql
-    file, go to section 'magic header string' on the official sqlite website,
-    'http://www.sqlite.org/fileformat.html'.
+    * For more details on method used to determine corruption/validity of sql
+      file, go to section 'magic header string' on the official sqlite website,
+      'http://www.sqlite.org/fileformat.html'
     """
-    sql_path_ = os_lib.normalize_path(sql_file_path)
-    if os_lib.get_basename(sql_path_, with_ext=True) == sql_path_:
-        raise ValueError('Valid file\'s are considered only with explicit file path.') from None
-    os_lib.ensure_file_exists(file_path=sql_file_path, valid_file_types=['sql'])
+    sql_file_path_ = os_lib.normalize_path(sql_file_path)
+    os_lib.ensure_path_is_absolute(sql_file_path_)
+    os_lib.ensure_file_exists(file_path=sql_file_path_, valid_file_types=['sql'])
     try:
-        with codecs.open(os_lib.normalize_path(sql_file_path), 'r', 'UTF-8') as sql_file:
+        with codecs.open(sql_file_path_, 'r', 'UTF-8') as sql_file:
             if codecs.encode(sql_file.read(16)) == '53514c69746520666f726d6174203300':
-                raise OSError('SQL file \'{}\' cannot be read - file corrupted.') from None
+                raise OSError('File \'{}\' is either corrupted or not a recognizable '
+                              'SQLite file.'.format(sql_file_path_)) from None
     except (UnicodeError, LookupError):
         raise UnicodeError('Only UTF-8 sql file encodings are supported.') from None
 
@@ -149,14 +216,14 @@ def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str) -> Non
     table_query = 'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?'
     is_table_in_database_ = bool(con.execute(table_query, [table_name]).fetchone())
     if not is_table_in_database_:
-        raise ValueError('Table does not exist in database currently connected to.'.format(con))
+        raise ValueError('Table \'{}\' does not exist @ database \'{}\'.'.format(table_name, con))
 
 
 def select_column_names(con: sqlite3.Connection, table_name: str) -> List[str]:
     """Return column names from table in db con."""
     ensure_table_is_in_database(con, table_name)
     cursor = con.execute("SELECT * FROM " + table_name)
-    return tuple([col[0] for col in cursor.description])
+    return [col[0] for col in cursor.description]
 
 
 def read_json_file(file_path: str) -> Any:
@@ -179,40 +246,43 @@ def write_json_file(file_path: str, contents: object) -> None:
         json_file.write(json.dumps(contents))
 
 
-def read_flat_file_as_df(file_path: str, datetime_format: str=None) -> pd.DataFrame:
+def read_flat_file_as_df(file_path: str, date_columns: Iterable[Union[str, int]]=()) -> pd.DataFrame:
     """Fetch flat file from given path as a pandas DF. Supported: .csv, and .json.
 
-    Infers if `datetime_format` (eg '%Y-%m-%d %H:%M:%S'), is not given.
+    Infers if `datetime_parser` is not given, which gives far greater performance
+    than relying on a custom function for parsing datetimes.
     """
-    dt_format = datetime_format.strip(' ') if datetime_format else None
-    date_unit = 's' if dt_format and dt_format.endswith('%S') else 'ms'  # infer type from format
+    # todo: mention iso 8601, etc...
+    # todo: split up extension cases into if statements, and add it's corresponding details in docs
+    # todo: incorporate read_json_file if deemed necessary
+    # todo: add date_column checking (ensuring if csv that the cols exist, and extract numbers)
+    # todo: add above checking for json as well, ensure date_columns/fields exist + aren't ints, etc
     file_to_df_mappings = {
-        '.csv': lambda: pd.read_csv(file_path, index_col=0, parse_dates=True,
-                                    date_parser=lambda d: pd.to_datetime(d, format=datetime_format),
-                                    encoding='utf8', infer_datetime_format=True),
-        '.json': lambda: pd.read_json(file_path, date_unit=date_unit)
+        '.csv': partial(pd.read_csv, filepath_or_buffer=file_path, index_col=0,
+                        parse_dates=list(date_columns),
+                        encoding='utf8', infer_datetime_format=True),
+        '.json': partial(pd.read_json, path_or_buf=file_path, convert_dates=list(date_columns))
     }
-
-    # if completely empty file, return completely empty dataframe
+    # if completely empty file, return completely empty DataFrame
     os_lib.ensure_file_exists(file_path, valid_file_types=file_to_df_mappings.keys())
     if os_lib.is_empty_file(file_path):
         return pd.DataFrame()
     return file_to_df_mappings[os_lib.get_extension(file_path)]()  # call corresponding reader
 
 
-def write_df_to_flat_file(file_path: str, df: pd.DataFrame, replace_if_exists: bool = False,
-                          datetime_format: str = None) -> None:
+def write_df_to_flat_file(file_path: str, df: pd.DataFrame, replace_if_exists: bool=False,
+                          datetime_format: str=None) -> None:
     """Write given DF to flat file at given location. Supported: .csv, and .json.
 
     Infers if `datetime_format` (eg '%Y-%m-%d %H:%M:%S'), is not given.
     """
+    # todo: improve json reading to be more flexible, and finish docstring
     dt_format = datetime_format.strip(' ') if datetime_format else None
     date_unit = 's' if dt_format and dt_format.endswith('%S') else 'ms'  # infer type from format
     df_to_file_mappings = {
-        '.csv': lambda: df.to_csv(file_path, date_format=dt_format),
-        '.json': lambda: df.to_json(file_path, date_format=dt_format, date_unit=date_unit)
+        '.csv': partial(df.to_csv, path_or_buf=file_path, date_format=dt_format),
+        '.json': partial(df.to_json, path_or_buf=file_path, date_format=dt_format, date_unit=date_unit)
     }
-
     if replace_if_exists and os_lib.is_existent_file(file_path):
         os_lib.remove_file(file_path)
     os_lib.ensure_file_is_creatable(file_path, valid_file_types=df_to_file_mappings.keys())
@@ -242,7 +312,7 @@ def download_all_email_attachments(imap_connection: imaplib.IMAP4_SSL, email_uid
                                    output_dir: str) -> List[str]:
     """Download all attachment files for a given unique email id.
 
-    returns downloaded file paths, whether the download(s) were successful or not.
+    Return downloaded file paths, whether the download(s) were successful or not.
     """
     # todo: add further docs, detailing assumptions, requirements, imap, gmail, etc.
     file_paths = []
