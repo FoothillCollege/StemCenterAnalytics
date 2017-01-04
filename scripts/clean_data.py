@@ -1,100 +1,141 @@
 """Temporary data cleaning script: takes the 'cleaned' csv and cleans further, and builds db.
 
------- quick and dirty script to go from below form:
-time_of_request,quarter,week_in_quarter,day,course,wait_time
-2013-09-25 11:05:32,F 13,1,W,chem 30a 1,62
-2013-09-25 11:06:12,F 13,1,W,math 48b 1,29
-
------- to this form:
-time_of_request,wait_time,quarter,week_in_quarter,day,course_subject,course_number,
-    course_section,day_in_week
-2013-09-25 11:05:32,62,Fall 2013,1,W,Chemistry,30A,1,3
-2013-09-25 11:06:12,29,Fall 2013,1,W,Mathematics,48B,1,3
+Notes
+-----
+* To run as script from project dir in terminal, first set python path (export PYTHONPATH='.'):
+    $ python scripts/clean_data.py
+* Profiling in IPython:
+    %run -t -N1 scripts\clean_data.py
 """
+from typing import NamedTuple, Union, Tuple
+
+import numpy as np
 import pandas as pd
 
-from stem_center_analytics import EXTERNAL_DATASETS_DIR, INTERNAL_DATASETS_DIR
+from stem_center_analytics import INTERNAL_DATASETS_DIR
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import io_lib, os_lib
-from stem_center_analytics.warehouse import _data_models
+from stem_center_analytics.warehouse import data_models
 
 
+quarter_df = data_models.get_quarter_dates()
+def _extract_time(dt: str) -> str:
+    """Return `dt` parsed to a string of the format 'HH:MM:SS'."""
+    try:
+        parsed_time = input_validation.parse_time_of_day(dt)
+    except input_validation.ParsingError:
+        parsed_time = input_validation.parse_datetime(dt)
+    return parsed_time.split()[-1]
 
-def add_quarters(df: pd.DataFrame, drop_outside_range=False) -> pd.DataFrame:
-    """Add quarter column to df.
 
-    Assumes that the fh quarter log is up-to-date. Get only the dates we have in df.
+def _extract_elapsed_time(t1: str, t2: str) -> str:
+    """Return result of t2 - t1, with all times of string format 'HH:MM:SS'."""
+    t1, t2 = pd.to_datetime(t1), pd.to_datetime(t2)
+    wait_time = pd.Timedelta(t2 - t1).components
+    h, m, s = wait_time.hours, wait_time.minutes, wait_time.seconds
+    return input_validation.parse_time_of_day('{}:{}:{}'.format(h, m, s))
+
+
+def _determine_week_in_quarter(date: pd.datetime, quarter_term: str) -> int:
+    """Return week in quarter for given date and quarter term, assuming quarter term is correct."""
+    if not quarter_term:
+        return np.NaN
+    start_of_qtr = quarter_df.ix[quarter_term]['start_date']
+    return date.weekofyear - start_of_qtr.weekofyear + 1
+
+
+def _determine_quarter(date: pd.datetime) -> str:
+    """Return quarter (eg Fall 2013) corresponding to the given date, empty string if no match."""
+    date_range_mask = np.logical_and(quarter_df['start_date'] <= date, date <= quarter_df['end_date'])
+    matched_rows = quarter_df[date_range_mask].index.values
+    return str(matched_rows[0]) if matched_rows else ''
+
+
+def build_new_tutor_request_row(old_row: NamedTuple) -> \
+        Union[Tuple, Tuple[Union[str, pd.datetime], str, str, str, int, int]]:
+    """Map values from an old row to a cleaned sequence of values.
+
+    Parameters
+    ----------
+    old_row : NamedTuple
+        Column to value mapping of uncleaned dataframe with the following keys,
+        with the first three datetime-like, and the last two as strings:
+        [Index, time_of_request, time_of_service, course_name, course_section]
+
+    Returns
+    -------
+    new_row: Tuple of the form (datetime-like, str, str, int, int, str)
+        Sequence of cell values corresponding to the following keys:
+        [time_of_request, wait_time, quarter, week_in_quarter, day_in_week, course]
+
+    Examples
+    --------
+    >>> from collections import namedtuple
+    >>> OldRow = namedtuple('Row', 'Index,time_of_request,time_of_service,course_name,course_section')
+    >>> build_new_tutor_request_row(OldRow(*'9/25/2013,9/25/2013 10:03,11:05:32 AM,CHEM F030A,1'.split(',')))
+    ('2013-09-25 10:03:00', '01:02:32', 'Chemistry 30A 1', 'Fall 2013', 1, 4)
+    >>> build_new_tutor_request_row(OldRow(*'10/4/2016,10:08:26 AM,10:09:09 AM,MATH F001D,1'.split(',')))
+    ()
+    >>> # note the above row has a date that is not present in any archived quarter
+
+    Notes
+    -----
+    * If an old row has a date that does not fall within any quarters, then it is
+      not added to the new row.
     """
-    new_df = df
-    quarter_df = _data_models.get_quarter_dates()
-    new_df.insert(loc=0, column='quarter', value=None)  # create a quarter column
-    # brute force set quarter get_values for all sc_data entries...OPTIMIZE LATER!!
-    for qtr_term, qtr_start, qtr_end in quarter_df.itertuples():
-        for entry_date in new_df.index:
-            if pd.to_datetime(qtr_start) <= pd.to_datetime(entry_date) <= pd.to_datetime(qtr_end):
-                new_df.set_value(index=entry_date, col='quarter', value=qtr_term)
+    date = pd.to_datetime(input_validation.parse_datetime(str(old_row.Index), include_time=False))
+    quarter = _determine_quarter(date)
+    if not quarter:
+        return ()
 
-    return new_df if not drop_outside_range else new_df.dropna(subset=['quarter'])
+    start_time = _extract_time(old_row.time_of_request)
+    end_time = _extract_time(old_row.time_of_service)
+    wait_time = _extract_elapsed_time(start_time, end_time)
+    course = input_validation.parse_course(old_row.course_name + ' ' + old_row.course_section)
 
+    quarter = _determine_quarter(date)
+    week_in_quarter = _determine_week_in_quarter(date, quarter)
+    day_in_week = date.toordinal() % 7 + 1  # weekday: sun=1, sat=7
 
-def add_week_in_quarters(df: pd.DataFrame) -> pd.DataFrame:
-    """Adds weeks in the quarter to the given df."""
-    quarters = _data_models.get_quarter_dates()
-    week_of_qtr_starts = df['quarter'].apply(lambda qtr: quarters.loc[qtr, 'start_date'].weekofyear)
-    list_of_weeks_in_qtr = [entry_week - week_of_qtr_start + 1
-                            for entry_week, week_of_qtr_start
-                            in zip(df.index.weekofyear, week_of_qtr_starts)]
-
-    new_df = df
-    new_df.insert(loc=1, column='week_in_quarter', value=list_of_weeks_in_qtr)
-    return new_df
+    return str(date).split()[0] + ' ' + start_time, wait_time, course, quarter, week_in_quarter, day_in_week
 
 
-def override_index(df: pd.DataFrame, col_name_to_index: str='time_of_request') -> pd.DataFrame:
-    """Sort the column to be made index, reset and drop old index column."""
-    # for dropping duplicate dates...
-    # df.groupby(new_sc_data.index).first()
-    new_df = df
-    new_df.sort_values(by=[col_name_to_index], ascending=True, inplace=True)
-    new_df.set_index(keys=col_name_to_index, drop=True, inplace=True)
-    new_df.drop(df.index.name, axis=1, inplace=True)  # now, drop col with old index name
-    return new_df
+def process_tutor_request_data(if_exists: str) -> None:
+    """Clean data and add to database, if_exists: {'replace', 'append', 'fail'}.
+
+    Note that any row with dates falling outside the range of quarters specified in
+    'stem_center_analytics/warehouse/quarter_dates.csv'.
+    """
+    new_column_names = ('time_of_request', 'wait_time', 'course', 'quarter', 'week_in_quarter', 'day_in_week')
+
+    old_df = data_models.get_tutor_request_data(as_clean=False).head(500)
+    new_rows = []
+    for row in old_df.itertuples():
+        new_row = build_new_tutor_request_row(row)
+        if new_row:
+            new_rows.append(new_row)
+
+    new_df = pd.DataFrame.from_records(data=new_rows, index=new_column_names[0], columns=new_column_names)
+    new_df = new_df.groupby(new_df.index).first()  # todo: replace with second increment for duplicates
+    new_df.sort_index(axis=0, ascending=True, inplace=True)
+
+    with data_models.connect_to_stem_center_db() as con:
+        io_lib.write_df_to_database(con, new_df, table_name='tutor_requests', if_exists=if_exists)
 
 
-# for replacing negative wait-times...
-# df.replace(to_replace=-1, value=0, inplace=True)
-
-def main():
-    data_file_name = 'unclean_tutor_requests.csv'
-    df = io_lib.read_flat_file_as_df(os_lib.join_path(EXTERNAL_DATASETS_DIR, data_file_name))
-    print(df)
-
-    # replace course column by its components (subject, number, section)
-    df['course'] = input_validation.parse_courses(list((df['Course_name'] + ' ' + df['Course_section'])))
-
-    df[['course_subject', 'course_number', 'course_section']] = df['course'].apply(pd.Series)
-    df.drop(labels=['Course_name', 'Course_section', 'course'], axis=1, inplace=True)
-    print(df)
-
-    df = add_quarters(df, drop_outside_range=True)
-    df = add_week_in_quarters(df)
-    print(df)
-    '''
-    # rebuilds database with tutor request data
+def build_database():
+    """Rebuild database from scratch."""
     db_path = os_lib.join_path(INTERNAL_DATASETS_DIR, 'stem_center_db.sql')
     io_lib.create_sql_file(db_path, replace_if_exists=True)
-    with _data_models.connect_to_stem_center_db() as con:
-        io_lib.write_df_to_database(con, df, new_table_name='tutor_requests')
-    '''
-
-
-# since input validation's only accepts a datetime RANGE (dashed input),
-# use input validation's function parse_datetime and apply to col/index
+    process_tutor_request_data(if_exists='replace')
 
 
 if __name__ == '__main__':
-    main()
+    process_tutor_request_data(if_exists='rebuild')
+    #process_tutor_request_data(if_exists='append')
 
 
-# todo: ENGLISH?!? what am I suppose to with that?
-# todo: add wait_time fix to avoid issues with zero wait_times; cause such a thing is impossible
+# todo: add command line interface for this script (with argparse)
+# todo: add automatic backup db dumps, etc
+# todo: add integrity checks (eg: ensure week in quarter is 1 - 12, no primary key conflicts, etc)
+# todo: fix appending issues
