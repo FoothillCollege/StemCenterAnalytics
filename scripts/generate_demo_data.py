@@ -51,7 +51,8 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
     ----------
     if index in aggregate option, then groupby index instead...
     aggregate_option : Mapping[str, callable]
-        numpy function to apply element-wise, such as {'count', 'median', 'mean'}
+        numpy function to apply element-wise to given column name,
+        such as {'count', 'median', 'mean'}
     interval_type : {hour, day_in_week, week_in_quarter, month, quarter, year}
         interval to compute on
 
@@ -61,7 +62,7 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
         which no specific column is needed.
         Parameters are not parsed.
     """
-    interval_type_ = input_validation.parse_time_unit_name(interval_type)
+    interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
     if interval_type_ in ('day_in_week', 'week_in_quarter', 'quarter'):
         col_data = [sc_data.__getattr__(interval_type)]
     elif interval_type in ('hour', 'month', 'year'):
@@ -72,10 +73,6 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
     if len(aggregate_option) != 1:
         raise ValueError('Internal error: only one column can be aggregated on at a time.')
     aggregated_df = sc_data.groupby(by=col_data).aggregate(aggregate_option)
-
-    # fixme: alter wait_times to ensure nonzero, so wait_times can be used instead for counting...
-    if 'quarter' in aggregate_option:
-        aggregated_df.rename(columns={'quarter': 'num_requests'}, inplace=True)
 
     if interval_type == 'quarter':  # ordering undefined for quarter strings, so sort output...
         return _sort_index_by_list(
@@ -103,8 +100,8 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
     -----
     Unlike aggregate sc_data, parameters are parsed.
     """
-    metric_type_ = input_validation.parse_metric_name(metric_type)
-    interval_type_ = input_validation.parse_time_unit_name(interval_type)
+    metric_type_ = input_validation.METRIC_LABEL_NAMES.parse(metric_type)
+    interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
     # print(interval_type, '===>', interval_type_)
     if metric_type_ == 'demand':
         aggregate_mappings = {'quarter': np.count_nonzero}  # arbitrary column name for counting

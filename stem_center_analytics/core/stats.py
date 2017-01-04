@@ -20,7 +20,7 @@ SORT_ORDER = {
 def get_avg_wait_time(sc_data: pd.DataFrame, interval_option: str) -> pd.DataFrame:
     """Return given DF aggregated by given column according to interval option (year/day/etc.)."""
     aggregated_df = sc_data.groupby([sc_data.index.hour]).aggregate({'wait_time': np.mean})
-    interval_option_ = input_validation.parse_time_unit_name(interval_option)  # unsorted for now...
+    interval_option_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_option)  # unsorted for now...
     return _sort_index_by_list(df=aggregated_df, rank_order=SORT_ORDER[interval_option_])
 
 
@@ -71,11 +71,10 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
 
     Notes
     -----
-        Aggregation is all done on 'wait_time' column, except for counts, in
-        which no specific column is needed.
-        Parameters are not parsed.
+    * Aggregation is all done on 'wait_time' column
+    * Parameters are not parsed
     """
-    interval_type_ = input_validation.parse_time_unit_name(interval_type)
+    interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES(interval_type)
     if interval_type_ in ('day_in_week', 'week_in_quarter', 'quarter'):
         col_data = [sc_data.__getattr__(interval_type)]
     elif interval_type in ('hour', 'month', 'year'):
@@ -108,14 +107,14 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
     interval_type : {hour, day_in_week, week_in_quarter, month, quarter, year}
         interval to compute metric on
     metric_type: {'demand', 'wait_time'}
-        *demand: total number of requests are counted over intervals for given range.
-        *wait_time: wait_times are averaged over intervals for given range.
+        * demand: total number of requests are counted over intervals for given range.
+        * wait_time: wait_times are averaged over intervals for given range.
     Notes
     -----
     Unlike aggregate sc_data, parameters are parsed.
     """
-    metric_type_ = input_validation.parse_metric_name(metric_type)
-    interval_type_ = input_validation.parse_time_unit_name(interval_type)
+    metric_type_ = input_validation.METRIC_LABEL_NAMES.parse(metric_type)
+    interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
     # print(interval_type, '===>', interval_type_)
     if metric_type_ == 'demand':
         aggregate_mappings = {'quarter': np.count_nonzero}  # arbitrary column name for counting
