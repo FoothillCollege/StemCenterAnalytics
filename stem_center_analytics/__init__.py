@@ -83,6 +83,7 @@ def config_pandas_display_size(max_rows: int=50, max_cols: int=20, max_width: in
 
 config_pandas_display_size()
 
+
 # group 1: build the deployment pipeline
 # todo: separate private settings (email passwords, etc), into public repo excluded files
 # todo: automate deployment process via shell script, including forced add for dev_settings.py
@@ -97,7 +98,7 @@ config_pandas_display_size()
 # todo: add backup dbs as necessary, have an uncleaned db (rather than file)
 # todo: figure out steps to take and notification process in case of massive errors/data-loss/etc
 # todo: add roll back and log function (possibly via context manager?) for use in the above process
-# todo: ensure separation of student id's...(possibly have on the heroku repo only?)
+# todo: ensure separation of student id's...(possibly have on the Heroku repo only?)
 # see bottom of file for more details on this process
 
 
@@ -169,3 +170,35 @@ config_pandas_display_size()
 
 # This needs to be figured out so I don't have the extra task of copying/pasting/etc
 # the existing local copy EVERY time!
+
+
+# todo: talk to Eric about how to deal with errors...possibly build GUI tool that notifies him
+# of the rows that failed to be processed correctly for cases that are anomolies in the data/system...
+# fatal error example: format of csv changed extremely drastically such that parsing functions fail for everything
+# versus wait-time being zero or duplicate dates. or ask him how to deal with...
+# (in contrast to truly fatal errors in which I am to be notified via email...)
+
+# todo: possibly differentiate between row failures versus all failures, and corresponding row numbers logged?
+
+# regarding various data cleaning things...
+# todo: ENGLISH?!? what am I suppose to with that?
+# todo: add wait_time fix to avoid issues with zero wait_times; cause such a thing is impossible
+
+# todo: complain to Eric about date formats!!! (MAKE 24hr format to 24hr format with no dates!!!)
+# possibly notify eric through gui tool when quarter date not updated!?
+
+
+
+# -------------- for the data_models module:
+
+# todo: add data validity and column info assumptions for each dataset's retrieval function
+# specifically, for each dataset, note the ordered list of column names, file name/location,
+# and conditions for each column (eg: formats, value assumptions, etc)
+# ...since the data will fail in the scripting/automation process and won't make it in anyways...
+
+# todo: possibly add general value/format assumptions for the entire project...
+# the above would be done to reduce redundancy in data retrieval/automation docstrings
+# todo: possibly link such assumptions in appropriate parts of docs... (in sphinx-api-docs that is)
+
+
+# todo: generalize the tutor request pipeline to data for tutor available by hour and student logins
