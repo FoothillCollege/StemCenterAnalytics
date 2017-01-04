@@ -5,7 +5,7 @@ Notes
 * Dependency of this package is on `stem_analytics.utils`,
   but NOT on `stem_analytics.core`.
 """
-from stem_center_analytics.warehouse._data_models import (
+from stem_center_analytics.warehouse.data_models import (
     get_student_login_data, get_tutor_request_data,
     connect_to_stem_center_db, get_quarter_dates,
     get_course_records, get_set_of_all_courses
