@@ -1,21 +1,19 @@
 """Collection of path, file, and directory utilities.
 
 Intended to add a self containing, consistent, and robust layer over the
-standard os module. OS should not be needed outside this module.
+standard os module, and thus `os` should not be needed outside this module.
 There are four main areas of file/directory functionality covered:
 introspection, generic removal/creation, validation, and path parsing.
 
 Notes
 -----
-All path parameters for every function are normalized (made path independent).
-
-Minimal usage of neighboring functions in this module reduce call-stack
-complexity, thus os.path functions are used repetitively.
-
-Functions with names that start with 'ensure' are meant to be used prior to
-file input/output, to ensure failures are caught ahead of time. This is very
-important since virtually nothing in the API will work correctly if data is not
-retrieved correctly.
+* All path parameters for every function are normalized (made path independent).
+* Functions with names that start with 'ensure' are meant to be used prior to
+  file input/output, to ensure failures are caught ahead of time. This is very
+  important since virtually nothing in the API will work correctly if data is not
+  retrieved correctly.
+* Minimal usage of neighboring functions in this module to reduce call-stack
+  complexity, thus os.path functions are used repetitively.
 """
 import os
 import errno
@@ -72,16 +70,16 @@ def get_path_of_python_source(obj: object) -> str:
 
     Notes
     -----
-    Given object is a package if its name is same as its parent directory's,
-    and its source file is an __init__.py. In that case, we return the parent
-    directory of the source file (exact package path).
+    * Given object is a package if and only if its name is same as its parent
+      directory's, and its source file is an __init__.py. In that case, we
+      return the parent directory of the source file (exact package path)
     """
     file_path = os.path.normpath(inspect.getfile(object=obj))
     if os.path.splitext(file_path)[-1].lower() != '.py':
         raise ValueError('Only python source objects can be inspected for path.')
     if not os.path.isfile(file_path):
         raise FileNotFoundError(errno.ENOENT, 'Python source cannot be found ', file_path)
-
+    
     if file_path.endswith('__init__.py') and os.path.dirname(file_path).endswith(obj.__name__):
         return os.path.normpath(os.path.dirname(file_path))
     return file_path
@@ -97,35 +95,40 @@ def create_directory(dir_path: str) -> None:
 
     See Also
     --------
-    For requirements of a successful directory creation, and the corresponding
-    exceptions raised, visit function `ensure_directory_is_creatable`.
+    * For requirements of a successful directory creation, and the corresponding
+      exceptions raised, visit function `ensure_directory_is_creatable`.
     """
     dir_path_ = os.path.normpath(dir_path.strip(' '))
     ensure_directory_is_creatable(dir_path_)
-    if not is_existent_directory(dir_path_):
+    os.mkdir(path=dir_path_)
+
+
+def remove_directory(dir_path: str, ignore_errors=False) -> None:
+    """Remove directory at given path, with an option of ignoring any Errors."""
+    dir_path_ = os.path.normpath(dir_path.strip(' '))
+    if ignore_errors:
+        with contextlib.suppress(OSError):
+            shutil.rmtree(path=dir_path_, ignore_errors=True)
+    else:
         try:
-            os.mkdir(path=dir_path_)
-        except OSError as e:
-            raise e from None
+            ensure_directory_exists(dir_path_)
+            shutil.rmtree(path=dir_path_, ignore_errors=False)
+        except Exception:
+            raise OSError('Directory \'{}\' failed to be removed.'.format(dir_path_))
 
 
-def remove_directory(dir_path: str, ignore_errors=True) -> None:
-    """Remove directory at given path, ignoring OSErrors by default."""
-    error_type = OSError if ignore_errors else ()
-    with contextlib.suppress(error_type):
-        dir_path_ = os.path.normpath(dir_path.strip(' '))
-        ensure_directory_exists(dir_path_)
-        shutil.rmtree(os.path.normpath(dir_path.strip(' ')), ignore_errors)
-
-
-def remove_file(file_path: str, ignore_errors=True) -> None:
-    """Remove file at given path, ignoring OSErrors by default."""
-    error_type = OSError if ignore_errors else ()
-    with contextlib.suppress(error_type):
-        file_path_ = os.path.normpath(file_path.strip(' '))
-        if not os.path.isfile(file_path_) and not ignore_errors:
-            raise FileNotFoundError(errno.ENOENT, 'No such file', file_path_)
-        os.remove(file_path_)
+def remove_file(file_path: str, ignore_errors=False) -> None:
+    """Remove file at given path, with an option of ignoring any Errors."""
+    file_path_ = os.path.normpath(file_path.strip(' '))
+    if ignore_errors:
+        with contextlib.suppress(OSError):
+            os.remove(file_path_)
+    else:
+        try:
+            ensure_file_exists(file_path_)
+            os.remove(file_path_)
+        except Exception:
+            raise OSError('File \'{}\' failed to be removed.'.format(file_path_))
 
 
 def ensure_successful_imports(names: Iterable[str]) -> None:
@@ -138,9 +141,8 @@ def ensure_successful_imports(names: Iterable[str]) -> None:
 
     Notes
     -----
-    Imports are lost (goes out of scope) once the function returns
+    * Imports are lost (goes out of scope) once the function returns
     """
-    # note: imports are lost once the func goes out of scope
     unsuccessful_imports = []
     for name in names:
         try:
@@ -154,6 +156,8 @@ def ensure_successful_imports(names: Iterable[str]) -> None:
 def ensure_file_type_is_supported(file_path: str, valid_file_types: Iterable(str)=()) -> None:
     """Valid if file is one of the given file types.
 
+    Raises
+    ------
     ValueError
         * If file does not end with one of `valid_file_types` extensions
           or has more than one extension.
@@ -178,7 +182,7 @@ def ensure_file_is_creatable(file_path: str, valid_file_types: Iterable[str]=())
         * If file does not end with one of `valid_file_types` extensions
     """
     file_path_ = os.path.normpath(file_path.strip(' '))
-    parent_dir_path_ = os.path.dirname(file_path_)
+    parent_dir_path_ = os.path.normpath(os.path.dirname(file_path_))
     if os.path.exists(file_path_):
         raise FileExistsError(errno.ENOENT, 'Cannot create file at non-vacant location', file_path_)
     if not os.path.isdir(parent_dir_path_):
@@ -198,7 +202,7 @@ def ensure_directory_is_creatable(dir_path: str) -> None:
         * If path is a child of a non-existent parent directory
     """
     dir_path_ = os.path.normpath(dir_path.strip(' '))
-    parent_dir_path_ = os.path.dirname(dir_path_)
+    parent_dir_path_ = os.path.normpath(os.path.dirname(dir_path_))
     if os.path.exists(dir_path_):
         raise FileExistsError(errno.ENOENT, 'Cannot create directory at non-vacant location',
                               dir_path_)
@@ -218,7 +222,7 @@ def ensure_file_exists(file_path: str, valid_file_types: Iterable[str]=()) -> No
     ValueError
         * If file does not end with one of `valid_file_types` extensions
     """
-    file_path_ = normalize_path(file_path)
+    file_path_ = os.path.normpath(file_path.strip(' '))
     if not os.path.isfile(file_path_):
         raise FileNotFoundError(errno.ENOENT, 'No such file', file_path_)
     ensure_file_type_is_supported(file_path_, valid_file_types)  # path valid: check extension
@@ -235,6 +239,23 @@ def ensure_directory_exists(dir_path: str) -> None:
     dir_path_ = os.path.normpath(dir_path.strip(' '))
     if not os.path.isdir(dir_path_):
         raise FileNotFoundError(errno.ENOENT, 'No such directory', dir_path_)
+
+
+def ensure_path_is_absolute(file_path: str) -> None:
+    """Valid if file path is absolute.
+
+    Raises
+    ------
+    ValueError
+        * If file path is not absolute
+
+    Notes
+    -----
+    * In contrast to most other functions in `os_lib` starting with 'ensure',
+      given path is NOT checked for existence
+    """
+    if not os.path.isabs(os.path.normpath(file_path.strip(' '))):
+        raise ValueError('File path \'{}\' is not absolute.')
 
 
 def join_path(base_path: str, *args: str) -> str:
@@ -261,7 +282,8 @@ def get_parent_dir(path: str) -> str:
     return os.path.normpath(os.path.dirname(os.path.normpath(path.strip(' '))))
 
 
-def get_basename(path: str, with_ext: bool=True) -> str:
+def get_basename(path: str, include_extension: bool=True) -> str:
     """Return unix-style basename (eg: '/foo/bar/' => 'bar')."""
-    name = os.path.split(os.path.normpath(path.strip(' ')))[-1]  # normalize + grab last component
-    return name if with_ext else os.path.splitext(name)[0]
+    # normalize path, and return the last component
+    name = os.path.split(os.path.normpath(path.strip(' ')))[-1]
+    return name if include_extension else os.path.splitext(name)[0]
