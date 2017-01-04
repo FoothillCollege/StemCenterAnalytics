@@ -59,7 +59,7 @@ class ParserDict(OrderedDict):
                                            'letters, digits, spaces, and underscores.')
         super().__init__(args)
 
-    def map_to_token(self, string: str, raise_if_not_found: bool=True) -> str:
+    def parse(self, string: str, raise_if_not_found: bool=True) -> str:
         """Map string to token, raising if not found (or return '')."""
         tokens = self.keys()
         for token in tokens:  # check each parser set for membership
@@ -74,7 +74,14 @@ class ParserDict(OrderedDict):
                            .format(string, tokens_))
 
 
-DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+COL_NAMES = ParserDict(
+    ('date',            {'date', 'date_of_request'}),
+    ('time_of_request', {'time_of_request', 'time of request', 'start_time', 'start'}),
+    ('time_of_service', {'time_of_service', 'time of service', 'end_time', 'end'}),
+    ('wait_time',       {'wait_time', 'wait time', 'waittime'}),
+    ('course_name',     {'course_name', 'course name'}),
+    ('course_section',  {'course_section', 'course section', 'section', 'sec'})
+)
 METRIC_LABEL_NAMES = ParserDict(
     ('wait_time', {'wait_time', 'wait time', 'waittime'}),
     ('demand',    {'demand'})
@@ -105,11 +112,11 @@ TIME_UNIT_VALUES = types.SimpleNamespace(
         ('Sunday',    {'7', 'u', 'su', 'sun', 'sunday'})
     ),
     WEEKS_IN_SUMMER_QUARTER=ParserDict(
-        *[(str(wk), {str(wk)}) for wk in range(0, 12)]
+        *[(str(wk), {str(wk)}) for wk in range(1, 7)]
     ),
-    # generate args i.e.: [('0', {'0'}), ..., ('11', {'11'})]
+    # generate args i.e.: [('1', {'1'}), ..., ('12', {'12'})]
     WEEKS_IN_QUARTER=ParserDict(
-        *[(str(wk), {str(wk)}) for wk in range(0, 12)]
+        *[(str(wk), {str(wk)}) for wk in range(1, 13)]
     ),
     MONTHS=ParserDict(
         ('January',   {'1', 'jan', 'january'}),
@@ -144,7 +151,7 @@ TIME_UNIT_VALUES = types.SimpleNamespace(
 )
 
 # official course subject names were referenced
-SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
+#SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
 CORE_SUBJECTS = ParserDict(
     ('Mathematics',      {'mat', 'math', 'mathematics'}),
     ('Physics',          {'phy', 'phys', 'physics'}),
@@ -161,7 +168,8 @@ OTHER_SUBJECTS = ParserDict(
     ('Economics',               {'eco', 'econ', 'economics'}),
     ('Non Credit Basic Skills', {'non', 'ncbs', 'non credit basic skills'}),
     ('Psychology',              {'psy', 'psyc', 'psych', 'psychology'}),
-    ('English',                 {'engl', 'english'})
+    ('English',                 {'engl', 'english'}),
+    ('History',                 {'history', 'hist'})
 )
 ALL_SUBJECTS = ParserDict(
     *(list(CORE_SUBJECTS.items()) + list(OTHER_SUBJECTS.items()))
@@ -230,16 +238,15 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
     if ' - ' not in user_input:
         return [mapping_func(string.strip(' ')) for string in user_input.split(',')]
 
-    # a dash is in input, attempt to parse as a dashed string
+    # if a dash is in input, attempt to parse as a dashed string
     if user_input.count('-') == 1 and ' - ' not in user_input:
         raise ValueError('Dashed input must be separated by \' - \' (including spaces).')
-    # parse dashed input
     left_token, _, right_token = ' '.join(user_input_.split()).partition(' - ')
     left_value, right_value = mapping_func(left_token), mapping_func(right_token)
     if not values_to_slice:  # endpoints only (no order checking here)
         return left_value, right_value
 
-    # OTHER_SUBJECTS wise we return sliced list
+    # otherwise we return sliced list
     values = list(values_to_slice)
     left_index, right_index = values.index(left_value), values.index(right_value)
     if left_index < right_index:
@@ -248,243 +255,61 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
                        '\'LHS - RHS\' where LHS < RHS.'.format(user_input))
 
 
-def parse_days(days: Union[str, int, Sequence[Union[str, int]]]) -> List[str]:
-    """Parse input to list of weekdays (eg: 'Mon, Fri' to ['Monday', 'Friday'])."""
-    return parse_input(user_input=days,
-                       mapping_func=TIME_UNIT_VALUES.WEEKDAYS.map_to_token,
-                       values_to_slice=TIME_UNIT_VALUES.WEEKDAYS.keys())
-
-
-def parse_weeks_in_quarter(weeks_in_quarter: Union[int, str, Sequence[Union[int, str]]],
-                           is_summer: bool=False) -> List[str]:
-    """Parse int(s) or str(s) corresponding to week in quarter to list of strings."""
-    if is_summer:
-        return parse_input(user_input=weeks_in_quarter,
-                           mapping_func=TIME_UNIT_VALUES.WEEKS_IN_SUMMER_QUARTER.map_to_token,
-                           values_to_slice=TIME_UNIT_VALUES.WEEKS_IN_SUMMER_QUARTER.keys())
-    else:
-        return parse_input(user_input=weeks_in_quarter,
-                           mapping_func=TIME_UNIT_VALUES.WEEKS_IN_QUARTER.map_to_token,
-                           values_to_slice=TIME_UNIT_VALUES.WEEKS_IN_QUARTER.keys())
-
-
-def parse_quarters(quarters: Union[str, Sequence[str]], with_year: bool=True) -> List[str]:
-    """Parse quarter input to a list of full quarter names (eg: Fall 2013).
-
-    Examples
-    --------
-    >>> parse_quarters('Fall 2013 - Spring 2014')
-    ['Fall 2013', 'Winter 2014', 'Spring 2014']
-    >>> parse_quarters('F 13 - sp 2014')
-    ['Fall 2013', 'Winter 2014', 'Spring 2014']
-    >>> parse_quarters('summer 2014 - fall 2014')
-    ['Summer 2014', 'Fall 2014']
-    >>> parse_quarters('w 14 - w 15')
-    ['Winter 2014', 'Spring 2014', 'Summer 2014', 'Fall 2014', 'Winter 2015']
-    """
-    def parse_quarter(quarter: str) -> str:
-        try:
-            quarter_name, _, quarter_year = quarter.lower().partition(' ')
-            quarter_name_ = TIME_UNIT_VALUES.QUARTERS.map_to_token(quarter_name)
-            if with_year:
-                return quarter_name_ + ' ' + TIME_UNIT_VALUES.YEARS.map_to_token(quarter_year)
-            else:
-                return quarter_name_
-        except ValueError:
-            message = ('\'{}\' is invalid - quarter name must correspond to on of {}'
-                       .format(quarter, tuple(TIME_UNIT_VALUES.QUARTERS.keys())))
-            if with_year:
-                raise ParsingError(message + ' followed by a 2 or 4 digit year in current century.')
-            else:
-                raise ParsingError(message)
-
-    if isinstance(quarters, str) and ' - ' in quarters:
-        left, _, right = quarters.partition(' - ')
-        if len(left.split()) != len(left.split()):
-            raise ParsingError('Quarters on each side of dash must have exact same number'
-                               'of components:\n    - eg: \'F 13 - F 14\' - not \'F - F 14\').')
-    return parse_input(user_input=quarters,
-                       mapping_func=parse_quarter,
-                       values_to_slice=TIME_UNIT_VALUES.QUARTERS_WITH_YEARS.keys())
-
-
-def parse_years(years: Union[Union[str, int], Sequence[Union[str, int]]]) -> List[int]:
-    """Parse string(s) or int(s) years (eg 12, 2013) to list of integers.
-
-    Examples
-    --------
-    >>> parse_years('2013 - 2014')
-    ['2013', '2014']
-    """
-    def parse_year(year: str or int) -> int:
-        try:
-            return TIME_UNIT_VALUES.YEARS.map_to_token(str(year))
-        except Exception:
-            raise ParsingError('\'{}\' is invalid: both years in the range must be in '
-                               'current century with either two or four digits'.format(year))
-    return parse_input(user_input=years,
-                       mapping_func=parse_year,
-                       values_to_slice=TIME_UNIT_VALUES.YEARS.keys())
-
-
-def parse_courses(course_names: Union[str, Sequence[str]], as_tuple: bool=True,
-                  check_records: bool=False) -> List[Union[str, Tuple[str, str, str]]]:
-    """Parse course input to list of cleaned components or course names.
+def parse_datetime(dt: str, include_time: bool=True) -> str:
+    """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
 
     Parameters
     ----------
-    course_names : str or array-like of str
-        course name consisting of up to three components:
-        * subject, required: type of course subject (eg math)
-        * number, optional: course code (eg 1A)
-        * section, optional: course section number (eg 01)
-    as_tuple : bool, default True
-        Determines whether each parsed course name should be broken up or not
-    check_records : bool, default False
-        Determines whether each parsed course should be checked in the course records
+    dt : str or date-like object
+        Date of form 'YY-MM-DD HH:MM:SS' where H:M:S is optional
+    include_time : bool, default True
+        Determines if time should be included in return string
 
     Returns
     -------
-    array-like of 3 element string tuples
-        If `as_tuple`=True
-    list of str
-        If `as_tuple`=False
+    str
+        * If `include_time`=True return string with the format of
+          '%Y-%m-%d %H:%M:%S' with H:M:S zero by default
+        * If `include_time`=False return string with the format of
+          '%Y-%m-%d', with any given time omitted
 
     Raises
     ------
     ParsingError
-        * If the fully parsed course is not on record, according to the most
-          recent tutor request data
+        * If the string cannot be parsed as a date of the order year, month, day,
+          followed by an optional time of the format HH[:MM:SS am/pm]
 
-    Notes
-    -----
-    The algorithm goes as follows, for each course name given...:
-    1) Remove all excess space and convert to lower case
-    2) Breaks string into three components:
-        * Subject: substring spanning until first found digit (exclusive)
-        * Number: substring spanning from first found digit to space (exclusive)
-        * Section: substring spanning from character after space to end of string
-    3) Remove anomalies for each component:
-        * Period at end of course subject and number (eg math. -> math)
-        * F and up to three zeros from beginning of course number (eg F01A -> 1A)
-        * 0 or o at beginning of course section (eg 01W -> 1)
-    4) Maps course subject (eg: abbreviation)
-    5) Upper case course number and section
-    6) Check membership in a set of all possible course combinations,
-       as taken from the most recently updated tutor request data.
-    7) If present in the records, returns 3 element tuple if `as_tuple`=True,
-       else returns string.
+    See Also
+    --------
+    * `parse_time_of_day`
+    * `pandas.to_datetime`
 
     Examples
     --------
-    >>> parse_courses('computer science ', as_tuple=True)
-    [('Computer Science', '', '')]
-    >>> parse_courses('MATH 1A 01W', as_tuple=True)
-    [('Mathematics', '1A', '1W')]
-    >>> parse_courses('Mathematics   1d  02 ', as_tuple=True)
-    [('Mathematics', '1D', '2')]
-    >>> parse_courses('phys 4A 01', as_tuple=True)
-    [('Physics', '4A', '1')]
-    >>> parse_courses('MATH F022. 02', as_tuple=True)
-    [('Mathematics', '22', '2')]
-    >>> parse_courses('chem. 1A. 5', as_tuple=True)
-    [('Chemistry', '1A', '5')]
-    >>> parse_courses('chem. 1A. 5, math F0022. 2, math')
-    ['Chemistry 1A 5', 'Mathematics 22 2', 'Mathematics']
-    >>> parse_courses('cs 1a,phys 4c,mat 2a, Comp Sci 1B')
-    ['Computer Science 1A', 'Physics 4C', 'Mathematics 2A', 'Computer Science 1B']
+    >>> parse_datetime('2021-02-22 00:00:00', include_time=True)
+    '2021-02-22 00:00:00'
+    >>> parse_datetime('2021-02-22 00:00', include_time=True)
+    '2021-02-22 00:00:00'
+    >>> parse_datetime('2021/02/22 00:00:00', include_time=False)
+    '2021-02-22'
+    >>> parse_datetime('2021-02-22', include_time=True)
+    '2021-02-22 00:00:00'
+    >>> parse_datetime('2011.12.25 00:00:01', include_time=True)
+    '2011-12-25 00:00:01'
+    >>> parse_datetime('9/25/2013 11:48 am', include_time=True)
+    '2013-09-25 11:48:00'
     """
-    # todo: make this function shorter, more compact, less redundant...
-    def parse_full_course_name(course_name: str):
-        course_name_ = ' '.join(course_name.split()).lower()
-        first_digit_position = next((k for k, char in enumerate(course_name_) if char.isdigit()), -1)
-        if first_digit_position == -1:  # assume subject if input has no digits
-            subject, number, section = course_name.strip(' '), '', ''
-        else:  # otherwise, segment into three components (still works if section not present!)
-            subject = course_name_[0:first_digit_position].strip(' ')
-            number, _, section = course_name_[first_digit_position:].upper().partition(' ')
+    date, _, time = dt.partition(' ')
+    if time == '':
+        time = '00:00:00'
 
-        # an 'f' padding number will be at the end of subject string since input sliced at 1st digit
-        subject = re.sub('(\. f|\.| f)?$', '', subject)  # remove trailing '.', ' f', '. f'
-        number = re.sub('^0{,2}|(\.)?$', '', number)  # remove up to 3 leading 0s and 1 trailing '.'
-        section = re.sub('^0|o', '', section)  # remove leading occurrence of o or 0
-        if not check_records:
-            subject_ = ALL_SUBJECTS.map_to_token(subject)  # let it raise
-            return (subject_, number, section) if as_tuple else ' '.join([subject_, number, section]).strip(' ')
-
-        try:
-            subject = ALL_SUBJECTS.map_to_token(subject)
-            if subject not in SET_OF_ALL_COURSES:
-                raise ParsingError
-        except ParsingError:
-            raise ParsingError('Subject \'{}\' is not on record.'.format(subject)) from None
-
-        full_course_name = ' '.join([subject, number, section]).strip(' ')
-        if full_course_name in SET_OF_ALL_COURSES:
-            return (subject, number, section) if as_tuple else full_course_name
-
-        # full course name not record: check if it was due to unavailable course section/number
-        course_name_without_section = ' '.join([subject, number]).strip(' ')
-        if course_name_without_section in SET_OF_ALL_COURSES:
-            raise ParsingError('Course \'{}\' has no section \'{}\' on record.'
-                               .format(course_name_without_section, section))
-        if subject in SET_OF_ALL_COURSES:
-            raise ParsingError('Subject \'{}\' has no course number \'{}\' on record.'
-                               .format(subject, number))
-        raise ParsingError('\'{}\' cannot be recognized - course name requires a recognizable'
-                           'subject, followed by either an existing course\'s number OR its'
-                           'number and section.'.format(course_name_))
-
-    if ' - ' in course_names:
-        raise ParsingError('\'{}\' is invalid - course input cannot be dashed.')
-    return parse_input(user_input=course_names, mapping_func=parse_full_course_name)
-
-
-def parse_datetime_range(datetimes: Union[str]) -> Tuple[str, str]:
-    """Parse dashed string representing a range of datetimes.
-
-    Parameters
-    ----------
-    datetimes : str or array-like of str
-        Inclusive start and end date of form
-        'YY-MM-DD HH:MM:SS - YY-MM-DD HH:MM:SS' where H:M:S is optional
-
-    Returns
-    -------
-    tuple of str
-        Start/end dates of format '%Y-%m-%d %H:%M:%S' with H:M:S zero by default
-    list of str
-        Parsed datetimes of above format
-
-    Raises
-    ------
-    ParsingError if incorrect dashed-string format or individual times
-        cannot be parsed to a 24 hour 'HH:MM' format.
-    ParsingError if value 'start_date' >= 'end_time', as no range can be generated.
-
-    Examples
-    --------
-    >>> parse_datetime_range('2011/03/20')
-    ['2011-03-20 00:00:00']
-    >>> parse_datetime_range('2011-12-25 00:00  -  2012/12/25 00:00:01')
-    ('2011-12-25 00:00:00', '2012-12-25 00:00:01')
-    >>> parse_datetime_range('1999/01/01 0:0:0 - 2000/11/11 23:00')
-    ('1999-01-01 00:00:00', '2000-11-11 23:00:00')
-    >>> parse_datetime_range('2010/10/10 01:01:01 - 2010/10/11 10:10:10')
-    ('2010-10-10 01:01:01', '2010-10-11 10:10:10')
-    >>> parse_datetime_range('2015/08/01 - 2015/08/02 3:00:42')
-    ('2015-08-01 00:00:00', '2015-08-02 03:00:42')
-    """
-    # after `parse_input()`, map any values to datetime as necessary, and ensure dashed ordering
-    parsed_values = parse_input(user_input=datetimes, mapping_func=parse_datetime)
-    parsed_values = list(map(str, parsed_values))
-
-    if isinstance(datetimes, str) and ' - ' in datetimes:
-        if parsed_values[0] < parsed_values[-1]:  # two parsed end points, return as a pair
-            return tuple(parsed_values)
-        raise ParsingError('\'{}\' is invalid - dashed string must be of the form '
-                           '\'LHS - RHS\' where LHS < RHS.'.format(datetimes))
-    return parsed_values
+    datetime_format = '%Y-%m-%d %H:%M:%S' if include_time else '%Y-%m-%d'
+    try:
+        dt_ = pd.to_datetime(date + ' ' + parse_time_of_day(time))
+        return datetime.datetime.strftime(dt_, datetime_format)
+    except Exception:
+        raise ParsingError('\'{}\' is invalid - date must be recognizable as \'YY-MM-DD\' followed '
+                           'by an optional time of the format \'HH[:MM:SS am/pm]\'.'.format(dt))
 
 
 def parse_time_of_day(time: str) -> str:
@@ -544,140 +369,129 @@ def parse_time_of_day(time: str) -> str:
                            '\'HH[:MM:SS] [am/pm]\'.'.format(time.strip())) from None
 
 
-def parse_datetime(dt: Union[str, object], as_string: bool=True) -> Union[str, pd.datetime]:
-    """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
+def parse_quarter(quarter: str, with_year: bool=True) -> str:
+    """Parse quarter input to a list of full quarter names (eg: Fall 2013).
+
+    Examples
+    --------
+    >>> parse_quarter('Fall 2013')
+    'Fall 2013'
+    >>> parse_quarter('F 13')
+    'Fall 2013'
+    >>> parse_quarter('Fall 2013')
+    'Fall 2013'
+    >>> parse_quarter('sp 2012')
+    'Spring 2012'
+    """
+    quarter_name, _, quarter_year = quarter.lower().partition(' ')
+    map_term, map_year = TIME_UNIT_VALUES.QUARTERS.parse, TIME_UNIT_VALUES.YEARS.parse
+    try:
+        return (map_term(quarter_name) + ' ' + map_year(quarter_year) if with_year else
+                map_term(quarter_name))
+    except ParsingError:
+        message = ('\'{}\' is invalid - quarter name must correspond to on of {}'
+                   .format(quarter, tuple(TIME_UNIT_VALUES.QUARTERS.keys())))
+        message += ' followed by a 2 or 4 digit year in current century.' if with_year else '.'
+        raise ParsingError(message) from None
+
+
+def parse_course(course_name: str, check_records: bool=False) -> str:
+    """Parse course input to cleaned components or full course name.
 
     Parameters
     ----------
-    dt : str or date-like object
-        Date of form 'YY-MM-DD HH:MM:SS' where H:M:S is optional
-    as_string : bool, default True
-        Determines format of return
+    course_name : str
+        course name consisting of up to three components:
+        * subject, required: type of course subject (eg math)
+        * number, optional: course code (eg 1A)
+        * section, optional: course section number (eg 01)
+    check_records : bool, default False
+        Determines whether each parsed course should be checked in the course records
 
     Returns
     -------
-    tuple of str
-        Start/end dates of format '%Y-%m-%d %H:%M:%S' with H:M:S zero by default
-    list of str
-        Parsed datetimes of above format
+    str
+        Parsed course name with the same components of the original input
 
     Raises
     ------
     ParsingError
-        * If `dt` cannot be cast to a str
-        * If date not of the form 'YY-MM-DD' follow by an optional time
-          of the form followed by a time of the format HH[:MM:SS am/pm
+        * If the fully parsed course is not on record, according to the most
+          recent tutor request data
 
-    See Also
-    --------
-    * `parse_time_of_day`
-    * `pandas.to_datetime`
-
-    Examples
-    --------
-    >>> parse_datetime('2021-02-22 00:00:00')
-    '2021-02-22 00:00:00'
-    >>> parse_datetime('2011.12.25 00:00:01')
-    '2011-12-25 00:00:01'
-    """
-    try:
-        date, _, time = ' '.join(str(dt).split()).partition(' ')
-    except TypeError:
-        raise ParsingError('Only strings or date-like objects can be parsed '
-                           'to a datetime-string.')
-
-    try:
-        dt_string = date + ' ' + parse_time_of_day(time) if time else date
-        dt = pd.to_datetime(dt_string, format=DATETIME_FORMAT)
-        return str(dt) if as_string else dt
-    except ValueError:
-        raise ParsingError('\'{}\' is invalid - date must be of the form \'YY-MM-DD\', optionally'
-                           'followed by a time of the format \'HH[:MM:SS am/pm]\''.format(dt))
-
-
-def parse_time_range(time_range: str) -> Tuple[str, str]:
-    """Parse string representing time of day to two time strings of format='HH[:MM:SS]'.
-
-    Parameters
-    ----------
-    time_range : str
-        Dashed string of format 'start_time - end_time' representing the time
-        range, where the value of 'start_time' is <= the value of 'end_time'.
-
-    Returns
-    -------
-    * If parse_to_datetime is False : tuple of str
-        Representing a start-time, end-time pair (format HH:MM) of desired time range.
-    * If parse_to_datetime is True : tuple of two datetime-objects
-        Pair of start/end times as datetime objects. Note that the year is
-        arbitrary, and only the hour and minute fields are relevant.
-
-    Raises
-    ------
-    ParsingError
-        * If incorrect dashed-string format or individual times cannot be
-          parsed to a 24 hour 'HH:MM' format.
-        * If value 'start_time' >= 'end_time', as no range can be generated.
+    Notes
+    -----
+    The algorithm goes as follows, for each course name given...:
+    1) Remove all excess space and convert to lower case
+    2) Breaks string into three components:
+        * Subject: substring spanning until first found digit (exclusive)
+        * Number: substring spanning from first found digit to space (exclusive)
+        * Section: substring spanning from character after space to end of string
+    3) Remove anomalies for each component:
+        * Period at end of course subject and number (eg math. -> math)
+        * F and up to three zeros from beginning of course number (eg F01A -> 1A)
+        * 0 or o at beginning of course section (eg 01W -> 1)
+    4) Maps course subject (eg: abbreviation)
+    5) Upper case course number and section
+    6) Check membership in a set of all possible course combinations,
+       as taken from the most recently updated tutor request data
+    7) If present in the records, return the parsed string
 
     Examples
     --------
-    >>> parse_time_range('12:00am - 00:30')
-    ('00:00:00', '00:30:00')
-    >>> parse_time_range('9am - 9pm')
-    ('09:00:00', '21:00:00')
-    >>> parse_time_range('2:00 - 4')
-    ('02:00:00', '04:00:00')
-    >>> parse_time_range('6:17 pm - 18:20')
-    ('18:17:00', '18:20:00')
-    >>> parse_time_range('15 - 16')
-    ('15:00:00', '16:00:00')
-    >>> parse_time_range('0:01 - 23:59')
-    ('00:01:00', '23:59:00')
-
-    See Also
-    --------
-    Visit the docstring of `parse_time_of_day` for more detailed information
-    on what individual times (on either side of the given dash) are valid.
+    >>> parse_course('computer science ')
+    'Computer Science'
+    >>> parse_course('MATH 1A 01W')
+    'Mathematics 1A 1W'
+    >>> parse_course('Mathematics   1d  02 ')
+    'Mathematics 1D 2'
+    >>> parse_course('phys 4A 01')
+    'Physics 4A 1'
+    >>> parse_course('MATH F022. 02')
+    'Mathematics 22 2'
+    >>> parse_course('chem. 1A. 5')
+    'Chemistry 1A 5'
+    >>> parse_course('math F0022. 2')
+    'Mathematics 22 2'
+    >>> parse_course('Comp Sci 1B')
+    'Computer Science 1B'
     """
-    if isinstance(time_range, str) and ' - ' in time_range:
-        return parse_input(user_input=time_range, mapping_func=parse_time_of_day, values_to_slice=())
-    raise ParsingError('\'{}\' is invalid - `time_range` is only accepted '
-                       'as dashed input.'.format(time_range))
+    course_name_ = ' '.join(course_name.split()).lower()
+    first_digit_position = next((k for k, char in enumerate(course_name_) if char.isdigit()), -1)
+    if first_digit_position == -1:  # assume subject if input has no digits
+        subject, number, section = course_name.strip(' '), '', ''
+    else:  # otherwise, segment into three components (still works if section not present!)
+        subject = course_name_[0:first_digit_position].strip(' ')
+        number, _, section = course_name_[first_digit_position:].upper().partition(' ')
 
+    # an 'f' padding number will be at the end of subject string since input sliced at 1st digit
+    subject = re.sub('(\. f|\.| f)?$', '', subject)  # remove trailing '.', ' f', '. f'
+    number = re.sub('^0{,2}|(\.)?$', '', number)  # remove up to 3 leading 0s and 1 trailing '.'
+    section = re.sub('^0|o', '', section)  # remove leading occurrence of o or 0
+    if not check_records:
+        subject_ = ALL_SUBJECTS.parse(subject)  # let it raise
+        return ' '.join([subject_, number, section]).strip(' ')
 
-def parse_time_unit_name(time_unit_label: str) -> str:
-    """Return given interval option as a normalized time unit name (eg: year, quarter, week_num).
-
-    Examples
-    --------
-    >>> parse_time_unit_name('hours')
-    'hour'
-    >>> parse_time_unit_name('hrs')
-    'hour'
-    >>> parse_time_unit_name('yrs')
-    'year'
-    >>> parse_time_unit_name('yearly')
-    'year'
-    >>> parse_time_unit_name(' qtr ')
-    'quarter'
-    >>> parse_time_unit_name('DAYS')
-    'day_in_week'
-    >>> parse_time_unit_name('wk in qtr')
-    'week_in_quarter'
-    """
-    time_unit_ = time_unit_label.strip(' ').lower()
+    # otherwise, check records, and if not available report the reason for missing
     try:
-        return TIME_UNIT_LABEL_NAMES.map_to_token(time_unit_)
+        subject = ALL_SUBJECTS.parse(subject)
+        if subject not in SET_OF_ALL_COURSES:
+            raise ParsingError
     except ParsingError:
-        raise ParsingError('\'{}\' is invalid - time unit label must correspond to one of {}.'
-                           .format(time_unit_, TIME_UNIT_LABEL_NAMES.keys())) from None
+        raise ParsingError('Subject \'{}\' is not on record.'.format(subject)) from None
 
+    full_course_name = ' '.join([subject, number, section]).strip(' ')
+    if full_course_name in SET_OF_ALL_COURSES:
+        return full_course_name
 
-def parse_metric_name(metric_label: str) -> str:
-    """Return given interval option as a normalized time unit (demand, wait_time)."""
-    metric_label_ = metric_label.strip(' ').lower()
-    try:
-        return METRIC_LABEL_NAMES.map_to_token(metric_label_)
-    except ParsingError:
-        raise ParsingError('\'{}\' is invalid - metric type must correspond to one of {}.'
-                           .format(metric_label_, tuple(METRIC_LABEL_NAMES.keys()))) from None
+    # full course name not record: check if it was due to unavailable course section/number
+    course_name_without_section = ' '.join([subject, number]).strip(' ')
+    if course_name_without_section in SET_OF_ALL_COURSES:
+        raise ParsingError('Course \'{}\' has no section \'{}\' on record.'
+                           .format(course_name_without_section, section))
+    if subject in SET_OF_ALL_COURSES:
+        raise ParsingError('Subject \'{}\' has no course number \'{}\' on record.'
+                           .format(subject, number))
+    raise ParsingError('\'{}\' cannot be recognized - course name requires a recognizable'
+                       'subject, followed by either an existing course\'s number OR its'
+                       'number and section.'.format(course_name_))
