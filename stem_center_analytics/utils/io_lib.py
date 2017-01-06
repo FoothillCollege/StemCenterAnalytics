@@ -2,7 +2,10 @@
 
 Notes
 -----
-* Minimal usage of neighboring functions in this module reduce call-stack complexity.
+* All database IO functions, unless otherwise specified in its docs,
+  raise ValueError if table does not exist.
+* Minimal usage of neighboring functions in this module reduce call-stack
+  complexity.
 """
 import json
 import errno
@@ -11,7 +14,7 @@ import codecs
 import imaplib
 import sqlite3
 from functools import partial
-from typing import Iterable, Sequence, Union, List, Any
+from typing import Sequence, Union, List, Any
 
 import pandas as pd
 
@@ -56,83 +59,6 @@ def connect_to_db(db_path: str) -> sqlite3.Connection:
         raise ConnectionRefusedError(errno.ECONNREFUSED,
                                      'SQLite file \'{}\' cannot be reached'
                                      .format(os_lib.get_basename(db_path)))
-
-
-def read_database_table_as_df(con: sqlite3.Connection, table_name: str, columns: Sequence[str]=(),
-                              date_columns: Sequence[str]=()) -> pd.DataFrame:
-    """Retrieve table of given name from database as a df.
-
-    Infers first column as index.
-    columns: subset of columns to retrieve
-    parse_dates: mapping of column names to inferred datetime formats
-    """
-    index = select_column_names(con, table_name)[0]
-    print(index)
-    ensure_table_is_in_database(con, table_name)
-    return pd.read_sql(sql='SELECT * FROM ' + table_name, con=con, index_col=index,
-                       parse_dates=date_columns, columns=columns)
-
-
-def write_df_to_database(con: sqlite3.Connection, df: pd.DataFrame,
-                         table_name: str, if_exists: str='fail') -> None:
-    """Write contents of DataFrame to sqlite table.
-
-    Parameters
-    ----------
-    con : sqlite3.Connection
-        Database connection object for sqlite3
-    df : pd.DataFrame
-        DataFrame to write to sql table
-    table_name : str
-        Name of table to update or create
-    if_exists : str of {'fail', 'replace', 'append'}, default 'fail'
-        * fail: if table exists, do nothing else create table
-        * replace: if table exists drop it and recreate table else create table
-        * append: if table exists, insert at end of table, else do nothing
-
-    Notes
-    -----
-    * `if_exists` options do not raise any errors, rather they dictate the
-      corresponding message that is logged/printed to console
-    * Action taken and total number of row changes are logged accordingly
-    * Note that `if_exists` options follow different semantics than the
-      parameter of the same name in the method `DataFrame.to_sql`
-    """
-    normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
-    if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
-        raise ValueError('Given table name \'{}\' is invalid - only letters, digits, spaces,'
-                         ' dashes, and underscores are allowed.'.format(table_name))
-
-    table_is_in_db = is_table_in_database(con, table_name)
-    actions = ('fail', 'append', 'replace')
-    if if_exists not in actions:
-        raise ValueError('`action_if_exists` must be in {\'fail\', \'replace\', \'append\'}.')
-    if if_exists == 'append':
-        ensure_table_is_in_database(con, 'tutor_requests')
-
-    try:
-        df.to_sql(name=table_name, con=con, if_exists=if_exists)
-    except Exception as e:
-        if isinstance(e, ValueError):  # catch if_exists='fail' exception
-            pass
-        else:
-            raise IOError('DataFrame failed to be imported as table \'{}\' in the database '
-                          'present at \'{}\'.'.format(table_name, con))
-
-    # generate a report for the database update
-    deciding_factors = (if_exists, table_is_in_db)
-    outcomes = {
-        ('fail', True): 'Table \'{}\' cannot be created - if_exists=\'fail\'',
-        ('fail', False): 'Table \'{}\' successfully created',
-        ('append', True): 'Table \'{}\' successfully appended to',
-        ('append', False): 'Cannot append to non-existent table \'{}\' - append failed',
-        ('replace', True): 'Table \'{}\' successfully replaced',
-        ('replace', False): 'Cannot replace non-existent table \'{}\' - created instead'
-    }
-    outcome = outcomes[deciding_factors].format(table_name)
-    print('\nLatest changes to db @ {}...'
-          '\n   {} ({:,} row changes).'
-          .format(con, outcome, con.total_changes))
 
 
 def create_sql_file(sql_file_path: str, replace_if_exists: bool=False) -> None:
@@ -211,63 +137,110 @@ def is_table_in_database(con: sqlite3.Connection, table_name: str) -> bool:
         return False
 
 
-def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str) -> None:
-    """Raise ValueError if exact given table_name is not in con."""
+def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
+                                columns_to_select: Sequence[str]=None) -> None:
+    """Raise ValueError if exact given table_name is not in con. If columns_to_select check for existence."""
     table_query = 'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?'
     is_table_in_database_ = bool(con.execute(table_query, [table_name]).fetchone())
     if not is_table_in_database_:
         raise ValueError('Table \'{}\' does not exist @ database \'{}\'.'.format(table_name, con))
 
+    if columns_to_select:
+        cursor = con.execute("SELECT * FROM " + table_name)
+        columns_in_table = [col[0] for col in cursor.description]
+        set_of_columns = set(columns_to_select)
+        if len(columns_to_select) != len(set_of_columns) or not set_of_columns.issubset(columns_in_table):
+            raise ValueError('{} is invalid - `columns_to_select` are not a '
+                             'unique subset of the columns {} in the table \'{}\'.'
+                             .format(tuple(columns_to_select), tuple(columns_in_table), table_name))
 
-def select_column_names(con: sqlite3.Connection, table_name: str) -> List[str]:
+
+def get_all_columns_in_table(con: sqlite3.Connection, table_name: str) -> List[str]:
     """Return column names from table in db con."""
     ensure_table_is_in_database(con, table_name)
     cursor = con.execute("SELECT * FROM " + table_name)
     return [col[0] for col in cursor.description]
 
 
-def read_json_file(file_path: str) -> Any:
-    """Read json file from given path, empty dict if empty file."""
-    file_path_ = os_lib.normalize_path(file_path)
-    os_lib.ensure_file_exists(file_path_, valid_file_types=['json'])
-    if os_lib.is_empty_file(file_path):
-        return {}
-    with open(os_lib.normalize_path(file_path), 'r') as json_file:
-        return json.load(json_file)
+def write_df_to_database(con: sqlite3.Connection, df: pd.DataFrame,
+                         table_name: str, if_exists: str='fail') -> None:
+    """Write contents of DataFrame to sqlite table.
 
+    Parameters
+    ----------
+    con : sqlite3.Connection
+        Database connection object for sqlite3
+    df : pd.DataFrame
+        DataFrame to write to sql table
+    table_name : str
+        Name of table to update or create
+    if_exists : str of {'fail', 'replace', 'append'}, default 'fail'
+        * fail: if table exists, do nothing else create table
+        * replace: if table exists drop it and recreate table else create table
+        * append: if table exists, insert at end of table, else do nothing
 
-def write_json_file(file_path: str, contents: object) -> None:
-    """Write given contents to json file.
-
-    Any combination of list and dict (or OTHER_SUBJECTS json supported data types),
-    are allowed. File is overwritten if exists.
+    Notes
+    -----
+    * `if_exists` options do not raise any errors, rather they dictate the
+      corresponding message that is logged/printed to console
+    * Action taken and total number of row changes are logged accordingly
+    * Note that `if_exists` options follow different semantics than the
+      parameter of the same name in the method `DataFrame.to_sql`
     """
-    with open(os_lib.normalize_path(file_path), 'w') as json_file:
-        json_file.write(json.dumps(contents))
+    normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
+    if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
+        raise ValueError('Given table name \'{}\' is invalid - only letters, digits, spaces,'
+                         ' dashes, and underscores are allowed.'.format(table_name))
 
+    table_is_in_db = is_table_in_database(con, table_name)
+    actions = ('fail', 'append', 'replace')
+    if if_exists not in actions:
+        raise ValueError('`action_if_exists` must be in {\'fail\', \'replace\', \'append\'}.')
+    if if_exists == 'append':
+        ensure_table_is_in_database(con, 'tutor_requests')
 
-def read_flat_file_as_df(file_path: str, date_columns: Iterable[Union[str, int]]=()) -> pd.DataFrame:
-    """Fetch flat file from given path as a pandas DF. Supported: .csv, and .json.
+    try:
+        df.to_sql(name=table_name, con=con, if_exists=if_exists)
+    except Exception as e:
+        if isinstance(e, ValueError):  # catch if_exists='fail' exception
+            pass
+        else:
+            raise IOError('DataFrame failed to be imported as table \'{}\' in the database '
+                          'present at \'{}\'.'.format(table_name, con))
 
-    Infers if `datetime_parser` is not given, which gives far greater performance
-    than relying on a custom function for parsing datetimes.
-    """
-    # todo: mention iso 8601, etc...
-    # todo: split up extension cases into if statements, and add it's corresponding details in docs
-    # todo: incorporate read_json_file if deemed necessary
-    # todo: add date_column checking (ensuring if csv that the cols exist, and extract numbers)
-    # todo: add above checking for json as well, ensure date_columns/fields exist + aren't ints, etc
-    file_to_df_mappings = {
-        '.csv': partial(pd.read_csv, filepath_or_buffer=file_path, index_col=0,
-                        parse_dates=list(date_columns),
-                        encoding='utf8', infer_datetime_format=True),
-        '.json': partial(pd.read_json, path_or_buf=file_path, convert_dates=list(date_columns))
+    # generate a report for the database update
+    deciding_factors = (if_exists, table_is_in_db)
+    outcomes = {
+        ('fail', True): 'Table \'{}\' cannot be created - if_exists=\'fail\'',
+        ('fail', False): 'Table \'{}\' successfully created',
+        ('append', True): 'Table \'{}\' successfully appended to',
+        ('append', False): 'Cannot append to non-existent table \'{}\' - append failed',
+        ('replace', True): 'Table \'{}\' successfully replaced',
+        ('replace', False): 'Cannot replace non-existent table \'{}\' - created instead'
     }
-    # if completely empty file, return completely empty DataFrame
-    os_lib.ensure_file_exists(file_path, valid_file_types=file_to_df_mappings.keys())
-    if os_lib.is_empty_file(file_path):
-        return pd.DataFrame()
-    return file_to_df_mappings[os_lib.get_extension(file_path)]()  # call corresponding reader
+    outcome = outcomes[deciding_factors].format(table_name)
+    print('\nLatest changes to db @ {}...'
+          '\n   {} ({:,} row changes).'
+          .format(con, outcome, con.total_changes))
+
+
+def read_database_table_as_df(con: sqlite3.Connection, table_name: str, index: str,
+                              as_unique: bool, columns_to_use: Sequence[str]=None,
+                              date_columns: Sequence[str]=None) -> pd.DataFrame:
+    """Retrieve table of given name from database as a df.
+
+    Takes first columns_to_use element as index.
+    columns_to_use: subset of columns_to_use to retrieve
+    parse_dates: mapping of column names to inferred datetime formats
+    """
+    # todo: complete docstring...
+    ensure_table_is_in_database(con, table_name, columns_to_use)
+    index = [index] if index else None
+
+    query = 'SELECT DISTINCT ' if as_unique else 'SELECT '
+    query += ', '.join(columns_to_use) if columns_to_use else '*'
+    query += ' FROM ' + table_name
+    return pd.read_sql(sql=query, con=con, index_col=index, parse_dates=date_columns)
 
 
 def write_df_to_flat_file(file_path: str, df: pd.DataFrame, replace_if_exists: bool=False,
@@ -293,6 +266,52 @@ def write_df_to_flat_file(file_path: str, df: pd.DataFrame, replace_if_exists: b
             pass
     else:
         return df_to_file_mappings[os_lib.get_extension(file_path)]()  # call corresponding writer
+
+
+
+def read_database_table_as_df_(con: sqlite3.Connection, table_name: str, index_column: str,
+                               select_distinct: bool,
+                               columns_to_use: Sequence[str]=None,
+                               date_columns: Sequence[str]=None) -> pd.DataFrame:
+    pass
+
+
+def read_flat_file_as_df(file_path: str, date_columns: Sequence[Union[str, int]]=None) -> pd.DataFrame:
+    """Fetch flat file from given path as a pandas DF. Supported: .csv, and .json.
+
+    `columns_to_use`: huge speedup for csv, no noticeable effect for json
+    index inferred from first column of `columns_to_use`
+    """
+    file_to_df_mappings = {
+        '.csv': partial(pd.read_csv, filepath_or_buffer=file_path, parse_dates=date_columns,
+                        encoding='utf8', infer_datetime_format=True),
+        '.json': partial(pd.read_json, path_or_buf=file_path, convert_dates=date_columns)
+    }
+    # if completely empty file, return completely empty DataFrame
+    os_lib.ensure_file_exists(file_path, valid_file_types=file_to_df_mappings.keys())
+    if os_lib.is_empty_file(file_path):
+        return pd.DataFrame()
+    return file_to_df_mappings[os_lib.get_extension(file_path)]()  # call corresponding reader
+
+
+def read_json_file(file_path: str) -> Any:
+    """Read json file from given path, empty dict if empty file."""
+    file_path_ = os_lib.normalize_path(file_path)
+    os_lib.ensure_file_exists(file_path_, valid_file_types=['json'])
+    if os_lib.is_empty_file(file_path):
+        return {}
+    with open(os_lib.normalize_path(file_path), 'r') as json_file:
+        return json.load(json_file)
+
+
+def write_json_file(file_path: str, contents: object) -> None:
+    """Write given contents to json file.
+
+    Any combination of list and dict (or OTHER_SUBJECTS json supported data types),
+    are allowed. File is overwritten if exists.
+    """
+    with open(os_lib.normalize_path(file_path), 'w') as json_file:
+        json_file.write(json.dumps(contents))
 
 
 def connect_to_imap_server(server_host: str, user_name: str,
