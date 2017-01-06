@@ -23,7 +23,6 @@ from typing import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-from stem_center_analytics import EXTERNAL_DATASETS_DIR
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import os_lib, io_lib
 from stem_center_analytics.warehouse import get_tutor_request_data
@@ -163,7 +162,9 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
 
 def main():
     df = get_tutor_request_data()
-    root_output_dir = os_lib.join_path(EXTERNAL_DATASETS_DIR, 'pre_generated_data')
+    root_output_dir = os_lib.normalize_path(
+        path=r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets\pre_generated_data'
+    )
     with contextlib.suppress(OSError):
         os_lib.remove_directory(root_output_dir)  # clear the dir if exists
     os_lib.create_directory(root_output_dir)

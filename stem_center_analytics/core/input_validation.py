@@ -74,6 +74,7 @@ class ParserDict(OrderedDict):
                            .format(string, tokens_))
 
 
+
 COL_NAMES = ParserDict(
     ('date',            {'date', 'date_of_request'}),
     ('time_of_request', {'time_of_request', 'time of request', 'start_time', 'start'}),
@@ -151,7 +152,7 @@ TIME_UNIT_VALUES = types.SimpleNamespace(
 )
 
 # official course subject names were referenced
-#SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
+SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
 CORE_SUBJECTS = ParserDict(
     ('Mathematics',      {'mat', 'math', 'mathematics'}),
     ('Physics',          {'phy', 'phys', 'physics'}),

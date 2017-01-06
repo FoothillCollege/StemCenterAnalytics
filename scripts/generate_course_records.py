@@ -4,9 +4,8 @@ import json
 from typing import Iterable, List
 from collections import OrderedDict
 
-from stem_center_analytics import INTERNAL_DATASETS_DIR, warehouse
+from stem_center_analytics import warehouse
 from stem_center_analytics.core import input_validation
-from stem_center_analytics.utils import os_lib
 
 
 def natural_sort(strings: Iterable[str]) -> List[str]:
@@ -40,7 +39,6 @@ if __name__ == '__main__':
         subject_map['Other'] += natural_sort(
             strings=(df['course_subject'] + ' ' + df['course_number']).unique()
         )
-    output_file = os_lib.join_path(INTERNAL_DATASETS_DIR, 'course_records.json')
-    with open(output_file, 'w') as json_file:
+    with open(warehouse.DATA_FILE_PATHS.COURSE_RECORDS, 'w') as json_file:
         json_string = json.dumps(subject_map)
         json_file.write(json_string)

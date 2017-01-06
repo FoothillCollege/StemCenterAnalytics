@@ -2,7 +2,6 @@
 import os
 
 import dev_settings  # import the set env variables
-from stem_center_analytics import SCRIPT_DIR
 from stem_center_analytics.utils import os_lib, io_lib
 
 
@@ -25,7 +24,8 @@ def main():
         if not email_uids:
             exit(0)
         try:
-            file_names = io_lib.download_all_email_attachments(con, email_uids[0], SCRIPT_DIR)
+            output_dir = os_lib.normalize_path(os_lib.get_parent_dir(__file__))
+            file_names = io_lib.download_all_email_attachments(con, email_uids[0], output_dir)
         except Exception as e:
             print(e)  # print traceback
             print('attachment download failed')

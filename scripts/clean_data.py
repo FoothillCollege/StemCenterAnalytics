@@ -12,13 +12,12 @@ from typing import NamedTuple, Union, Tuple
 import numpy as np
 import pandas as pd
 
-from stem_center_analytics import INTERNAL_DATASETS_DIR
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import io_lib, os_lib
-from stem_center_analytics.warehouse import data_models
+from stem_center_analytics import warehouse
 
 
-quarter_df = data_models.get_quarter_dates()
+quarter_df = warehouse.get_quarter_dates()
 def _extract_time(dt: str) -> str:
     """Return `dt` parsed to a string of the format 'HH:MM:SS'."""
     try:
@@ -107,8 +106,9 @@ def process_tutor_request_data(if_exists: str) -> None:
     'stem_center_analytics/warehouse/quarter_dates.csv'.
     """
     new_column_names = ('time_of_request', 'wait_time', 'course', 'quarter', 'week_in_quarter', 'day_in_week')
-
-    old_df = data_models.get_tutor_request_data(as_clean=False).head(500)
+    old_df = io_lib.read_flat_file_as_df(
+        os_lib.join_path(r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets')
+    ).head(500)
     new_rows = []
     for row in old_df.itertuples():
         new_row = build_new_tutor_request_row(row)
@@ -119,23 +119,18 @@ def process_tutor_request_data(if_exists: str) -> None:
     new_df = new_df.groupby(new_df.index).first()  # todo: replace with second increment for duplicates
     new_df.sort_index(axis=0, ascending=True, inplace=True)
 
-    with data_models.connect_to_stem_center_db() as con:
+    with warehouse.connect_to_stem_center_db() as con:
         io_lib.write_df_to_database(con, new_df, table_name='tutor_requests', if_exists=if_exists)
 
 
-def build_database():
-    """Rebuild database from scratch."""
-    db_path = os_lib.join_path(INTERNAL_DATASETS_DIR, 'stem_center_db.sql')
-    io_lib.create_sql_file(db_path, replace_if_exists=True)
-    process_tutor_request_data(if_exists='replace')
-
-
 if __name__ == '__main__':
-    process_tutor_request_data(if_exists='rebuild')
-    #process_tutor_request_data(if_exists='append')
+    # todo: change below to support CLI script options...
+    option = 'rebuild'
 
+    if option == 'append':
+        # fixme: doesn't work at the moment...
+        process_tutor_request_data(if_exists='append')
 
-# todo: add command line interface for this script (with argparse)
-# todo: add automatic backup db dumps, etc
-# todo: add integrity checks (eg: ensure week in quarter is 1 - 12, no primary key conflicts, etc)
-# todo: fix appending issues
+    if option == 'rebuild':
+        io_lib.create_sql_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
+        process_tutor_request_data(if_exists='replace')

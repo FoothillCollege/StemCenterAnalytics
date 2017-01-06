@@ -17,7 +17,7 @@ import pandas as pd
 from flask import Flask, jsonify, make_response, request
 from flask_cors import CORS
 
-from stem_center_analytics import EXTERNAL_DATASETS_DIR, warehouse
+from stem_center_analytics import warehouse
 from stem_center_analytics.utils import os_lib
 
 # NOTE - this web service is a temporary setup, with the data to be replaced by dynamic API calls
@@ -121,8 +121,7 @@ def _get_file(quarter: str, time_range_type: str,
     if courses != 'all' and courses != ('all',) and courses != ['all']:
         raise ValueError('No specific courses supported yet.')
     matched_file = os_lib.join_path(
-        EXTERNAL_DATASETS_DIR,
-        'pre_generated_data',
+        r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets\pre_generated_data',
         quarter.replace('+', ' ').replace(' ', '_'),
         'time_range={}+{}&interval={}.json'.format(
             time_range_type,
@@ -158,3 +157,5 @@ def main():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')  # rebind to env's port
+
+# todo: instead of relying on file retrieval, do the whole thing dynamically

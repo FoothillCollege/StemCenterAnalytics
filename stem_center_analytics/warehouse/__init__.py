@@ -6,6 +6,7 @@ Notes
   but NOT on `stem_analytics.core`.
 """
 from stem_center_analytics.warehouse.data_models import (
+    DATA_FILE_PATHS,
     get_student_login_data, get_tutor_request_data,
     connect_to_stem_center_db, get_quarter_dates,
     get_course_records, get_set_of_all_courses

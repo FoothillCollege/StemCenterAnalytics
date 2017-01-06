@@ -21,7 +21,7 @@ from typing import Iterable, Sequence, Union, List
 
 import pandas as pd
 
-from stem_center_analytics.warehouse import data_models
+from stem_center_analytics import warehouse
 from stem_center_analytics.core import input_validation as prs
 
 
@@ -262,7 +262,7 @@ class TutorLog(_SCWrapper):
     """Extended version of SCData for tutor_log."""
 
     def __init__(self):
-        super().__init__(data_models.get_tutor_request_data(as_clean=True))
+        super().__init__(warehouse.get_tutor_request_data())
 
 
 class LoginData(_SCWrapper):
@@ -270,7 +270,7 @@ class LoginData(_SCWrapper):
     """Extended version of SCData for login_data."""
 
     def __init__(self):
-        super().__init__(data_models.get_student_login_data(as_clean=True))
+        super().__init__(warehouse.get_student_login_data())
 
 
 if __name__ == '__main__':
