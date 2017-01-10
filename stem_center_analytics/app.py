@@ -9,7 +9,6 @@ To test the web service locally, run the below commands from terminal:
     curl -u jeff:python -i "http://127.0.0.1:5000/?quarter=Fall+2013&courses=all"
 """
 import io
-import json
 from typing import Iterable
 
 import flask
@@ -17,8 +16,8 @@ import pandas as pd
 from flask import Flask, jsonify, make_response, request
 from flask_cors import CORS
 
-from stem_center_analytics import warehouse
-from stem_center_analytics.utils import os_lib
+from stem_center_analytics import warehouse, PROJECT_DIR
+from stem_center_analytics.utils import os_lib, io_lib
 
 # NOTE - this web service is a temporary setup, with the data to be replaced by dynamic API calls
 
@@ -121,15 +120,11 @@ def _get_file(quarter: str, time_range_type: str,
     if courses != 'all' and courses != ('all',) and courses != ['all']:
         raise ValueError('No specific courses supported yet.')
     matched_file = os_lib.join_path(
-        r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets\pre_generated_data',
+        PROJECT_DIR, 'external_datasets', 'pre_generated_data',
         quarter.replace('+', ' ').replace(' ', '_'),
-        'time_range={}+{}&interval={}.json'.format(
-            time_range_type,
-            time_range.replace('+', ' ').replace(' ', '_'), interval)
-    )
-    os_lib.ensure_file_exists(matched_file)
-    with open(matched_file, mode='r') as json_file:
-        return json.load(json_file)
+        'time_range={}+{}&interval={}.json'
+    ).format(time_range_type, time_range.replace('+', ' ').replace(' ', '_'), interval)
+    return jsonify(io_lib.read_json_file(matched_file))
 
 
 # fixme: add dispatching error handling for invalid tokens in url routes
