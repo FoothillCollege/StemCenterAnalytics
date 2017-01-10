@@ -22,9 +22,9 @@ from typing import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
+from stem_center_analytics import warehouse
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import os_lib, io_lib
-from stem_center_analytics import warehouse
 
 
 def _sort_index_by_list(df: pd.DataFrame, rank_order: Iterable[object]) -> pd.DataFrame:

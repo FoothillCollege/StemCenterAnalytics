@@ -7,32 +7,34 @@ Notes
 * Profiling in IPython:
     %run -t -N1 scripts\clean_data.py
 """
+import datetime
 from typing import NamedTuple, Union, Tuple
 
 import numpy as np
 import pandas as pd
 
+from stem_center_analytics import warehouse, PROJECT_DIR
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import io_lib, os_lib
-from stem_center_analytics import warehouse
 
 
 quarter_df = warehouse.get_quarter_dates()
-def _extract_time(dt: str) -> str:
+def _extract_time(dt: str, as_datetime=True) -> Union[str, pd.datetime.time]:
     """Return `dt` parsed to a string of the format 'HH:MM:SS'."""
     try:
         parsed_time = input_validation.parse_time_of_day(dt)
     except input_validation.ParsingError:
         parsed_time = input_validation.parse_datetime(dt)
-    return parsed_time.split()[-1]
+
+    extracted_time = parsed_time.split()[-1]
+    return pd.to_datetime(extracted_time) if as_datetime else extracted_time
 
 
-def _extract_elapsed_time(t1: str, t2: str) -> str:
+def _extract_elapsed_time(t1: pd.datetime, t2: pd.datetime, as_datetime=True) -> Union[str, pd.datetime]:
     """Return result of t2 - t1, with all times of string format 'HH:MM:SS'."""
-    t1, t2 = pd.to_datetime(t1), pd.to_datetime(t2)
     wait_time = pd.Timedelta(t2 - t1).components
     h, m, s = wait_time.hours, wait_time.minutes, wait_time.seconds
-    return input_validation.parse_time_of_day('{}:{}:{}'.format(h, m, s))
+    return input_validation.parse_time_of_day('{}:{}:{}'.format(h, m, s), as_datetime=as_datetime)
 
 
 def _determine_week_in_quarter(date: pd.datetime, quarter_term: str) -> int:
@@ -82,24 +84,24 @@ def build_new_tutor_request_row(old_row: NamedTuple) -> \
     * If an old row has a date that does not fall within any quarters, then it is
       not added to the new row.
     """
-    date = pd.to_datetime(input_validation.parse_datetime(str(old_row.Index), include_time=False))
+    date = input_validation.parse_datetime(str(old_row.Index), as_datetime=True)
     quarter = _determine_quarter(date)
     if not quarter:
         return ()
-
     start_time = _extract_time(old_row.time_of_request)
     end_time = _extract_time(old_row.time_of_service)
     wait_time = _extract_elapsed_time(start_time, end_time)
     course = input_validation.parse_course(old_row.course_name + ' ' + old_row.course_section)
 
-    quarter = _determine_quarter(date)
     week_in_quarter = _determine_week_in_quarter(date, quarter)
     day_in_week = date.toordinal() % 7 + 1  # weekday: sun=1, sat=7
 
-    return str(date).split()[0] + ' ' + start_time, wait_time, course, quarter, week_in_quarter, day_in_week
+    time_of_request = datetime.datetime.combine(date.date(), start_time.time())
+
+    return time_of_request, wait_time, course, quarter, week_in_quarter, day_in_week
 
 
-def process_tutor_request_data(if_exists: str) -> None:
+def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
     """Clean data and add to database, if_exists: {'replace', 'append', 'fail'}.
 
     Note that any row with dates falling outside the range of quarters specified in
@@ -107,8 +109,8 @@ def process_tutor_request_data(if_exists: str) -> None:
     """
     new_column_names = ('time_of_request', 'wait_time', 'course', 'quarter', 'week_in_quarter', 'day_in_week')
     old_df = io_lib.read_csv_file(
-        os_lib.join_path(r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets')
-    ).head(500)
+        os_lib.join_path(PROJECT_DIR, 'external_datasets', 'unclean_tutor_requests.csv')
+    )
     new_rows = []
     for row in old_df.itertuples():
         new_row = build_new_tutor_request_row(row)
@@ -119,6 +121,8 @@ def process_tutor_request_data(if_exists: str) -> None:
     new_df = new_df.groupby(new_df.index).first()  # todo: replace with second increment for duplicates
     new_df.sort_index(axis=0, ascending=True, inplace=True)
 
+    if replace_db:
+        io_lib.create_sqlite_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
     with warehouse.connect_to_stem_center_db() as con:
         io_lib.write_to_sqlite_table(con, new_df, table_name='tutor_requests', if_table_exists=if_exists)
 
@@ -133,5 +137,4 @@ if __name__ == '__main__':
         process_tutor_request_data(if_exists='append')
 
     if option == 'rebuild':
-        io_lib.create_sqlite_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
         process_tutor_request_data(if_exists='replace')
