@@ -22,15 +22,16 @@ import shutil
 import inspect
 import importlib
 import contextlib
-from typing import Iterable
+from typing import Sequence
 
 
+# --------------------------------- file and directory inspection ----------------------------------
 def is_existent_file(file_path: str) -> bool:
     """Return True if given file exists, else False.
 
     See Also
     --------
-    Function `ensure_file_exists` for the exception raising counterpart
+    * Function `ensure_file_exists` for the exception raising counterpart
     """
     try:
         ensure_file_exists(file_path)
@@ -44,7 +45,7 @@ def is_existent_directory(dir_path: str) -> bool:
 
     See Also
     --------
-    Function `ensure_directory_exists` for the exception raising counterpart
+    * Function `ensure_directory_exists` for the exception raising counterpart
     """
     try:
         ensure_directory_exists(dir_path)
@@ -86,22 +87,23 @@ def get_path_of_python_source(obj: object) -> str:
     return file_path
 
 
+# -------------------------------- file and directory manipulation ---------------------------------
 def create_directory(dir_path: str) -> None:
     """Make single directory (no intermediates) at given path if creatable.
-
-    Notes
-    -----
-    * Unlike the similar functions, `remove_directory` and `remove_file`,
-      no boolean is returned
 
     See Also
     --------
     * For requirements of a successful directory creation, and the corresponding
       exceptions raised, visit function `ensure_directory_is_creatable`.
     """
-    dir_path_ = os.path.normpath(dir_path.strip(' '))
+    dir_path_ = os.path.normpath(dir_path)
     ensure_directory_is_creatable(dir_path_)
     os.mkdir(path=dir_path_)
+
+
+def create_temp_file():
+    """Create temp file."""
+    pass
 
 
 def remove_directory(dir_path: str, ignore_errors=False) -> None:
@@ -132,26 +134,95 @@ def remove_file(file_path: str, ignore_errors=False) -> None:
             raise OSError('File \'{}\' failed to be removed.'.format(file_path_))
 
 
-def ensure_successful_imports(names: Iterable[str]) -> None:
-    """Valid if all objects of given names are successfully imported.
+@contextlib.contextmanager
+def change_directory(dir_path: str) -> str:
+    """Temporarily change directory to given path, similar to 'cd' in terminal.
+
+    Examples
+    --------
+    >>> import os
+    >>> from stem_center_analytics import PROJECT_DIR
+
+    >>> previous_dir = os.getcwd()
+    >>> with change_directory(PROJECT_DIR): print(os.getcwd() == PROJECT_DIR)
+    True
+    >>> previous_dir == os.getcwd()
+    True
+    """
+    new_cwd = os.path.normpath(dir_path)
+    old_cwd = os.path.normpath(os.getcwd())
+    ensure_directory_exists(new_cwd)
+    try:
+        os.chdir(new_cwd)
+        yield new_cwd
+    finally:
+        os.chdir(old_cwd)
+
+
+# ---------------------------------------- error checking ------------------------------------------
+def ensure_successful_imports(path: str, names: Sequence[str]) -> None:
+    """Valid if all object names are successfully imported at given path location.
+
+    Parameters
+    ----------
+    path : str
+        Path at which to import the given names. If file path given,
+        names are imported from its parent directory
+    names : array-like of str
+        Names of objects to import in the order given. This can be the name of
+        any importable object, but to ensure successful imports favor
+        full, absolute import names such as 'package.module.func', over '.func'
 
     Raises
     ------
     ImportError
-        * If any module in names failed to be imported correctly.
+        * If any module in names failed to be imported correctly
 
     Notes
     -----
     * Imports are lost (goes out of scope) once the function returns
     """
+    path_ = os.path.normpath(path.strip(' '))
+    dir_to_import_at = path_ if os.path.isdir(path_) else os.path.normpath(os.path.dirname(path_))
+
+    # import given names from the inferred directory location
     unsuccessful_imports = []
-    for name in names:
-        try:
-            importlib.import_module(name)
-        except ImportError:
-            unsuccessful_imports.append(name)
+    with change_directory(dir_to_import_at):
+        for name in names:
+            try:
+                importlib.import_module(name)
+            except ImportError:
+                unsuccessful_imports.append(name)
     if unsuccessful_imports:
         raise ImportError('Failed to import modules - {}.'.format(tuple(unsuccessful_imports)))
+
+
+def ensure_file_exists(file_path: str) -> None:
+    """Valid if path exists as a file.
+
+    Raises
+    ------
+    FileNotFoundError
+        * If path is not an existing file
+    ValueError
+        * If file does not end with one of `file_type` extensions
+    """
+    file_path_ = os.path.normpath(file_path.strip(' '))
+    if not os.path.isfile(file_path_):
+        raise FileNotFoundError(errno.ENOENT, 'No such file', file_path_)
+
+
+def ensure_directory_exists(dir_path: str) -> None:
+    """Valid if path exists as a directory.
+
+    Raises
+    ------
+    FileNotFoundError
+        * If path is a child of a non-existent parent directory
+    """
+    dir_path_ = os.path.normpath(dir_path.strip(' '))
+    if not os.path.isdir(dir_path_):
+        raise FileNotFoundError(errno.ENOENT, 'No such directory', dir_path_)
 
 
 def ensure_file_is_creatable(file_path: str) -> None:
@@ -196,6 +267,23 @@ def ensure_directory_is_creatable(dir_path: str) -> None:
                                 parent_dir_path_)
 
 
+def ensure_path_is_absolute(file_path: str) -> None:
+    """Valid if file path is absolute.
+
+    Raises
+    ------
+    ValueError
+        * If file path is not absolute
+
+    Notes
+    -----
+    * In contrast to most other functions in `os_lib` starting with 'ensure',
+      given path is NOT checked for existence
+    """
+    if not os.path.isabs(os.path.normpath(file_path.strip(' '))):
+        raise ValueError('File path \'{}\' is not absolute.')
+
+
 def ensure_valid_file_type(file_path: str, file_type: str) -> None:
     """Valid if file is one of the given file types.
 
@@ -204,6 +292,11 @@ def ensure_valid_file_type(file_path: str, file_type: str) -> None:
     ValueError
         * If file name has more than one extension
         * If file name doesn't have extension of `file_type`
+
+    Notes
+    -----
+    * In contrast to most other functions in `os_lib` starting with 'ensure',
+      given path is NOT checked for existence
     """
     file_name, file_extension = get_basename(file_path), get_extension(file_path)
     if file_name.count('.') != 1 or file_extension == '':
@@ -225,57 +318,19 @@ def ensure_valid_file_encoding(file_path: str, encoding: str) -> None:
     except LookupError:
         raise LookupError('Unknown encoding - \'{}\'.'.format(encoding_)) from None
     except UnicodeError:
-        raise UnicodeDecodeError('File \'{}\' cannot be decoded as \'{}\'.'.format(file_path_, encoding_))
+        raise UnicodeDecodeError(
+            'File \'{}\' cannot be decoded as \'{}\'.'.format(file_path_, encoding_))
 
 
-def ensure_file_exists(file_path: str) -> None:
-    """Valid if path exists as a file.
-
-    Raises
-    ------
-    FileNotFoundError
-        * If path is not an existing file
-    ValueError
-        * If file does not end with one of `file_type` extensions
-    """
-    file_path_ = os.path.normpath(file_path.strip(' '))
-    if not os.path.isfile(file_path_):
-        raise FileNotFoundError(errno.ENOENT, 'No such file', file_path_)
-
-
-def ensure_directory_exists(dir_path: str) -> None:
-    """Valid if path exists as a directory.
-
-    Raises
-    ------
-    FileNotFoundError
-        * If path is a child of a non-existent parent directory
-    """
-    dir_path_ = normalize_path(dir_path)
-    if not os.path.isdir(dir_path_):
-        raise FileNotFoundError(errno.ENOENT, 'No such directory', dir_path_)
-
-
-def ensure_path_is_absolute(file_path: str) -> None:
-    """Valid if file path is absolute.
-
-    Raises
-    ------
-    ValueError
-        * If file path is not absolute
+# ------------------------------------- path name manipulation -------------------------------------
+def join_path(path: str, *args: str) -> str:
+    """Return path joined with given items.
 
     Notes
     -----
-    * In contrast to most other functions in `os_lib` starting with 'ensure',
-      given path is NOT checked for existence
+    * Will break if items contain separators
     """
-    if not os.path.isabs(os.path.normpath(file_path.strip(' '))):
-        raise ValueError('File path \'{}\' is not absolute.')
-
-
-def join_path(base_path: str, *args: str) -> str:
-    """Return normalized base path joint with given items (assuming items contain no separators."""
-    base_path_ = os.path.normpath(base_path.strip(' '))
+    base_path_ = os.path.normpath(path.strip(' '))
     path_components = [arg.strip(' ') for arg in args]
     return os.path.normpath(os.path.join(base_path_, *path_components))
 
