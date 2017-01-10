@@ -27,10 +27,9 @@ class ParsingError(ValueError):
     pass
 
 
-# todo: clean up below tokens (make case consistent, simplify names, etc)
 class ParserDict(OrderedDict):
 
-    """ValidTokenMappings class.
+    """Create a key that maps to a set of it's acceptable aliases.
 
     Examples
     --------
@@ -256,29 +255,16 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
                        '\'LHS - RHS\' where LHS < RHS.'.format(user_input))
 
 
-def parse_datetime(dt: str, include_time: bool=True) -> str:
+def parse_datetime(dt: str, as_datetime: bool=False) -> Union[str, pd.datetime]:
     """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
-
-    Parameters
-    ----------
-    dt : str or date-like object
-        Date of form 'YY-MM-DD HH:MM:SS' where H:M:S is optional
-    include_time : bool, default True
-        Determines if time should be included in return string
 
     Returns
     -------
-    str
+    str, if `as_datetime`=True
         * If `include_time`=True return string with the format of
           '%Y-%m-%d %H:%M:%S' with H:M:S zero by default
-        * If `include_time`=False return string with the format of
-          '%Y-%m-%d', with any given time omitted
-
-    Raises
-    ------
-    ParsingError
-        * If the string cannot be parsed as a date of the order year, month, day,
-          followed by an optional time of the format HH[:MM:SS am/pm]
+    datetime-like, if `as_datetime`=False
+        * If `include_time`=True return parsed result as pandas.datetime object
 
     See Also
     --------
@@ -287,48 +273,51 @@ def parse_datetime(dt: str, include_time: bool=True) -> str:
 
     Examples
     --------
-    >>> parse_datetime('2021-02-22 00:00:00', include_time=True)
+    >>> parse_datetime('2021-02-22 00:00:00', as_datetime=False)
     '2021-02-22 00:00:00'
-    >>> parse_datetime('2021-02-22 00:00', include_time=True)
+    >>> parse_datetime('2021-02-22 00:00', as_datetime=False)
     '2021-02-22 00:00:00'
-    >>> parse_datetime('2021/02/22 00:00:00', include_time=False)
-    '2021-02-22'
-    >>> parse_datetime('2021-02-22', include_time=True)
+    >>> parse_datetime('2021/02/22 22:2:1', as_datetime=False)
+    '2021-02-22 22:02:01'
+    >>> parse_datetime('2021-02-22', as_datetime=False)
     '2021-02-22 00:00:00'
-    >>> parse_datetime('2011.12.25 00:00:01', include_time=True)
+    >>> parse_datetime('2011.12.25 00:00:01', as_datetime=False)
     '2011-12-25 00:00:01'
-    >>> parse_datetime('9/25/2013 11:48 am', include_time=True)
+    >>> parse_datetime('9/25/2013 11:48 am', as_datetime=False)
     '2013-09-25 11:48:00'
+    >>> parse_datetime('2015-2-2 00:21:00', as_datetime=True)
+    Timestamp('2015-02-02 00:21:00')
     """
     date, _, time = dt.partition(' ')
     if time == '':
         time = '00:00:00'
 
-    datetime_format = '%Y-%m-%d %H:%M:%S' if include_time else '%Y-%m-%d'
     try:
         dt_ = pd.to_datetime(date + ' ' + parse_time_of_day(time))
-        return datetime.datetime.strftime(dt_, datetime_format)
+        return dt_ if as_datetime else dt_.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
         raise ParsingError('\'{}\' is invalid - date must be recognizable as \'YY-MM-DD\' followed '
                            'by an optional time of the format \'HH[:MM:SS am/pm]\'.'.format(dt))
 
 
-def parse_time_of_day(time: str) -> str:
+def parse_time_of_day(time: str, as_datetime: bool=False) -> Union[str, pd.datetime.time]:
     """Parse string representing time of day to a format 'HH:MM:SS'.
 
     Parameters
     ----------
-    time : str
-        Represents time of day in format 'hour[:minutes][am/pm]'.
+    time : string
+        Represents time of day in format 'hour[:minutes[:seconds][am/pm]'.
         Hour is required, 24 hour format assumed, unless time ends with am/pm.
         Minutes (prefixed by colon) is optional, assumed to be 0 if not given.
+    as_datetime : bool, default False
+        Determine if value to return is string or datetime object
 
     Returns
     -------
-    If `parse_to_datetime` is False : str
-        Parsed time of day in format 'HH:MM'.
-    If `parse_to_datetime` is True : datetime-like object
-        Datetime object where only the hour and minute fields are relevant.
+    * If `parse_to_datetime` is True : datetime-like object
+        Pandas.datetime.time object
+    * If `parse_to_datetime` is False : string
+        Parsed time of day in format 'HH:MM:SS'
 
     Raises
     ------
@@ -336,22 +325,24 @@ def parse_time_of_day(time: str) -> str:
 
     Examples
     --------
-    >>> parse_time_of_day('12:00am')
+    >>> parse_time_of_day('12:00am', as_datetime=False)
     '00:00:00'
-    >>> parse_time_of_day('12:03:02 AM')
+    >>> parse_time_of_day('12:03:02 AM', as_datetime=False)
     '00:03:02'
-    >>> parse_time_of_day('9am')
+    >>> parse_time_of_day('9am', as_datetime=False)
     '09:00:00'
-    >>> parse_time_of_day('10:31')
+    >>> parse_time_of_day('10:31', as_datetime=False)
     '10:31:00'
-    >>> parse_time_of_day('6:17 pm')
+    >>> parse_time_of_day('6:17 pm', as_datetime=False)
     '18:17:00'
-    >>> parse_time_of_day('15')
+    >>> parse_time_of_day('15', as_datetime=False)
     '15:00:00'
-    >>> parse_time_of_day('1:01:59 pm')
+    >>> parse_time_of_day('1:01:59 pm', as_datetime=False)
     '13:01:59'
-    >>> parse_time_of_day('1:01:59 PM')
+    >>> parse_time_of_day('1:01:59 PM', as_datetime=False)
     '13:01:59'
+    >>> parse_time_of_day('00:31:00', as_datetime=True)
+    datetime.time(0, 31)
     """
     time_string = time.lower().replace(' ', '')
     is_twelve_hour_time = time_string.endswith('am') or time_string.endswith('pm')
@@ -363,8 +354,9 @@ def parse_time_of_day(time: str) -> str:
 
     try:
         dt = datetime.datetime.strptime(time_string, inferred_format)
-        return ':'.join([('0' if 0 <= t <= 9 else '') + str(t)
-                         for t in (dt.hour, dt.minute, dt.second)])
+        parsed_time = ':'.join([('0' if 0 <= t <= 9 else '') + str(t)
+                               for t in (dt.hour, dt.minute, dt.second)])
+        return pd.to_datetime(parsed_time).time() if as_datetime else parsed_time
     except ValueError:
         raise ParsingError('\'{}\' is invalid - time must be of format '
                            '\'HH[:MM:SS] [am/pm]\'.'.format(time.strip())) from None
