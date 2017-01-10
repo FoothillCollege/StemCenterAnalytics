@@ -2,16 +2,21 @@
 
 Notes
 -----
+* All IO functions in io_lib assume UTF-8 encoding ONLY
+* All output functions are made flexible such that empty data structures are
+  still written to disk without error. Likewise, empty files return their
+  corresponding empty data structure. It's important to note that works
+  contrary to the behavior in most of `pandas.io` functions.
+* Like the rest of the source, datetime parsing uses pandas.to_datetime() at
+  its core, and parses to ISO 8601 format: 'YYYY-MM-DD HH:MM:SS', or in
+  python convention, '%Y-%m-%d %H:%M:%S'
 * All database IO functions, unless otherwise specified in its docs,
   raise ValueError if table does not exist.
-* Minimal usage of neighboring functions in this module reduce call-stack
-  complexity.
 * All paths are ensured and error checked according to their IO function
   (write, create, read, etc), as well as checked to be absolute paths.
   This is all done in an effort to reduce mistaken replacements, and generally
   increase IO robustness.
 """
-import csv
 import json
 import errno
 import email
@@ -27,10 +32,11 @@ from stem_center_analytics.utils import os_lib
 
 
 # ------------------------------------------- HELPERS ----------------------------------------------
-def _prepare_file_for_creation(file_path: str, replace_if_exists: bool) -> None:
+def _prepare_file_for_creation(file_path: str, extension: str, replace_if_exists: bool) -> None:
     """If absolute path, remove file if exists, then check if path is creatable."""
     os_lib.ensure_path_is_absolute(file_path)
-    if replace_if_exists:
+    os_lib.ensure_valid_file_type(file_path, extension)
+    if replace_if_exists and os_lib.is_existent_file(file_path):
         os_lib.remove_file(file_path)
     # error if not replace_if_exists AND file already exists
     os_lib.ensure_file_is_creatable(file_path)
@@ -46,10 +52,30 @@ def _prepare_file_for_reading(file_path: str, extension: str, encoding: str) -> 
 
 # -------------------------------------------- CSV IO ----------------------------------------------
 def create_csv_file(file_path: str, data: Union[np.ndarray, pd.Series, pd.DataFrame],
-                    replace_if_exists: bool=False) -> None:
-    """Write given data to flat file at given location.
+                    replace_if_exists: bool = False) -> None:
+    """Create CSV file containing given data.
 
-    Infers dates as per ISO-8601 datetime format (eg '%Y-%m-%d %H:%M:%S').
+    Parameters
+    ----------
+    file_path : string
+        File path to create or replace as a utf-8 encoded CSV file
+    data : NumPy array, Pandas Series, or Pandas DataFrame
+        Contents to write to CSV, with date formats inferred per
+        ISO-8601 standards
+    replace_if_exists : boolean, default True
+        * If True remove file if present, creating a new one either way
+        * If False create only if a file is not present otherwise raise OSError
+
+    Notes
+    -----
+    * Internally data is converted to DataFrame format before converting to csv
+    * Unlike `pandas.write_csv`, empty DataFrames create any empty file
+
+    See Also
+    --------
+    * See Python online documentation of the more generalized function used
+      here for the raw IO, `pandas.DataFrame.write_csv` for more details
+      on errors and limitations.
     """
     file_path_ = os_lib.normalize_path(file_path)
     # convert to DataFrame
@@ -63,24 +89,43 @@ def create_csv_file(file_path: str, data: Union[np.ndarray, pd.Series, pd.DataFr
         raise ValueError('Given data is invalid - only Pandas Series, '
                          'Pandas DataFrame, and NumPy ndarray are supported.')
 
-    _prepare_file_for_creation(file_path_, replace_if_exists)
+    _prepare_file_for_creation(file_path_, '.csv', replace_if_exists)
     # if completely empty dataframe, create completely empty file
     if df.empty:
-        with open(file_path_, 'x'):
+        with open(file_path_, mode='x', encoding='utf-8'):
             pass
     else:
         return df.to_csv(path_or_buf=file_path_, mode='x', encoding='utf-8')
 
 
-def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]]=()) \
+def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]] = ()) \
         -> Union[np.ndarray, pd.DataFrame]:
-    """Fetch flat file from given path as a pandas DF.
+    """Retrieve contents of a csv file.
 
-    Take first column as index
-    `columns_to_use`: huge speedup for csv, no noticeable effect for json
-    index inferred from first column of `columns_to_use`
+    Parameters
+    ----------
+    file_path : string
+        File path to read as utf-8 encoded CSV
+    date_columns : array-like of strings, default ()
+        * Columns to parse to datetime, as per ISO-8601 datetime standards
+
+    Returns
+    -------
+    NumPy array
+        If only a single column is present
+    Pandas DataFrame
+        If no columns are present, as an empty DataFrame
+    Pandas DataFrame
+        If more than one column is retrieved from csv, with the first column
+        taken as index
+
+    See Also
+    --------
+    * See Pandas online documentation of the more generalized function used
+      here for the raw IO, `pandas.read_csv` for more details on errors
+      and limitations.
     """
-    date_columns_ = None if not date_columns else date_columns
+    date_columns_ = date_columns if date_columns else None
     file_path_ = os_lib.normalize_path(file_path)
     _prepare_file_for_reading(file_path_, extension='.csv', encoding='utf-8')
     # if completely empty file, return completely empty DataFrame
@@ -93,44 +138,110 @@ def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]]=()) \
 
 
 # -------------------------------------------- JSON IO ---------------------------------------------
-def create_json_file(file_path: str, contents: object, replace_if_exists: bool=True) -> None:
-    """Write given contents to json file.
+def create_json_file(file_path: str, contents: Any, replace_if_exists: bool = True) -> None:
+    """Create JSON file containing given data.
 
-    Any combination of list and dict (or other json supported data types),
-    are allowed. DataFrames are NOT supported.
+    Parameters
+    ----------
+    file_path : string
+        File path to create or replace as a utf-8 encoded JSON file at
+    contents : Any
+        Contents to write to JSON in the form of any combination of lists
+        or dictionaries.
+    replace_if_exists : boolean, default True
+        * If True remove file if present, creating a new one either way
+        * If False create only if a file is not present otherwise raise OSError
+
+    Notes
+    -----
+    * Since this function ONLY supports writing JSON supported data structures
+      to disk, Pandas DataFrames are NOT supported
+
+    See Also
+    --------
+    * See Python online documentation of the more generalized function used
+      here for the raw IO, `json.dumps` for more details on errors and
+      limitations.
     """
     file_path_ = os_lib.normalize_path(file_path)
-
-    if replace_if_exists and os_lib.is_existent_file(file_path_):
-        os_lib.remove_file(file_path_)
-    _prepare_file_for_creation(file_path_, replace_if_exists)
-    with open(file_path_, mode='x') as json_file:
+    _prepare_file_for_creation(file_path_, '.json', replace_if_exists)
+    with open(file_path_, mode='x', encoding='utf-8') as json_file:
         json_file.write(json.dumps(contents))
 
 
 def read_json_file(file_path: str) -> Any:
-    """Read json file from given path, empty dict if empty file."""
+    """Retrieve contents of JSON file.
+
+    Parameters
+    ----------
+    file_path : string
+        File path to read as utf-8 encoded JSON file
+
+    Returns
+    -------
+    contents : Any
+        Any JSON supported data structure, such as any combination of lists
+        or dictionaries.
+
+    Notes
+    -----
+    * Since this function ONLY supports writing JSON supported data structures
+      to disk, Pandas DataFrames are NOT supported
+    * Contrary to most other functions starting with 'read' in io_lib,
+      NO extra manipulation such as parsing or format inference is done
+      to any of the contents
+
+    See Also
+    --------
+    * See Python online documentation of the more generalized function used
+      here for the raw IO, `json.load` for more details on errors and
+      limitations.
+    """
     file_path_ = os_lib.normalize_path(file_path)
     _prepare_file_for_reading(file_path_, extension='.json', encoding='utf-8')
     if os_lib.is_empty_file(file_path_):
         return {}
-    with open(file_path_, 'r') as json_file:
+    with open(file_path_, mode='r', encoding='utf-8') as json_file:
         return json.load(json_file)
 
 
 # ------------------------------------------ DATABASE IO -------------------------------------------
-def create_sqlite_file(file_path: str, replace_if_exists: bool=False) -> None:
+def create_sqlite_file(file_path: str, replace_if_exists: bool = False) -> None:
     """Create SQL file if path is available and connection is successful.
+
+    Parameters
+    ----------
+    file_path : string
+        File path to create or replace as a utf-8 encoded SQLite file.
+        The file is created as an empty SQLite database with no tables.
+    replace_if_exists : boolean, default True
+        * If True remove file if present, creating a new one either way
+        * If False create only if a file is not present otherwise raise OSError
 
     Notes
     -----
-    * File is created only if `connect_to_sqlite_database` succeeds after creation
+    * The fact that the function `sqlite3.connect` indiscriminately creates a
+      SQLite file is relied upon here to establish the database
+    * If the file creation is successful, then the file path and the status of
+      'replaced' or 'created' is logged via `print`
+
+    Raises
+    ------
+    ValueError
+        * If error during file creation or a connection to the newly created
+          database fails to establish a connection, then the file is completely
+          removed
+
+    See Also
+    -------
+    * See docstring of `connect_to_sqlite_database` for more information
+      regarding what is considered a valid SQLite file.
     """
     file_path_ = os_lib.normalize_path(file_path)
     os_lib.ensure_path_is_absolute(file_path_)
     file_exists_before_creation = os_lib.is_existent_file(file_path_)
 
-    _prepare_file_for_creation(file_path_, replace_if_exists)
+    _prepare_file_for_creation(file_path_, '.sql', replace_if_exists)
     try:
         sqlite3.connect(file_path_)  # establish file path
         connect_to_sqlite_database(file_path_)
@@ -142,44 +253,79 @@ def create_sqlite_file(file_path: str, replace_if_exists: bool=False) -> None:
 
     # generate a report for the database update
     action_taken = 'replaced' if file_exists_before_creation else 'created'
-    print('Database \'{}\' was successfully {}.'.format(os_lib.get_basename(file_path), action_taken))
+    print(
+        'Database \'{}\' was successfully {}.'.format(os_lib.get_basename(file_path), action_taken))
 
 
 def read_sqlite_table(con: sqlite3.Connection, table_name: str,
-                      as_unique: bool, columns_to_use: Sequence[str]=(),
-                      date_columns: Sequence[str]=()) -> Union[np.ndarray, pd.DataFrame]:
-    """Retrieve table of given name from database as a df.
+                      as_unique: bool, columns_to_use: Sequence[str] = (),
+                      date_columns: Sequence[str] = ()) -> Union[np.ndarray, pd.DataFrame]:
+    """Retrieve contents of table in a sqlite database.
+
+    Parameters
+    ----------
+    con : sqlite3.Connection
+        SQLite3 connection to database containing table to read
+    table_name : string
+        Name of table to read from SQLite database
+    as_unique : boolean
+        * If True, only distinct rows are retrieved from the table. In the case
+          that all columns are retrieved and the table contains no duplicates,
+          then the value of `as_unique` makes no difference in the return value
+    columns_to_use : array-like of strings, default ()
+        * Use `columns_to_use` if non-empty, otherwise use all columns in table,
+          in both cases the columns are queried in order given, with first
+          column as index.
+    date_columns : array-like of strings, default ()
+        * Columns to parse to datetime
+
+    Returns
+    -------
+    NumPy array
+        If only a single `columns_to_use` is given
+    DataFrame
+        If more than one column is retrieved from table
 
     Notes
     -----
-    * If single column, return as a numpy array.
-    * Use columns_to_use if not None, otherwise use all columns in table, in both
-      cases the columns are queried in order given, with first column as index
+    * Through grabbing only the columns you need via `columns_to_use`,
+      you can get massive performance increases, especially when it can be
+      combined with `as_unique`.
+    * Expanding upon the above note, in the specific use case that only unique
+      values from a single column are needed the performance can approach the
+      retrieval of precomputed values from a csv file!
+
+    See Also
+    --------
+    * See Pandas online documentation of the more generalized function used
+      here for the raw IO, `pandas.read_sql` for more details on errors and
+      limitations.
     """
     ensure_table_is_in_database(con, table_name, columns_to_use)
-    index = [columns_to_use[0]] if columns_to_use else [get_all_columns_in_table(con, table_name)[0]]
+    index = [columns_to_use[0]] if columns_to_use else [
+        get_all_columns_in_table(con, table_name)[0]]
 
     query = 'SELECT DISTINCT ' if as_unique else 'SELECT '
     query += ', '.join(columns_to_use) if columns_to_use else '*'
     query += ' FROM ' + table_name
 
-    # if the queried df has no columns, than
+    # if the queried df has no columns,get_tutor_request_data than
     df = pd.read_sql(sql=query, con=con, index_col=index, parse_dates=date_columns)
     return df if len(df.columns) != 0 else df.index.values
 
 
 def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
-                          table_name: str, if_table_exists: str='fail') -> None:
+                          table_name: str, if_table_exists: str = 'fail') -> None:
     """Write contents of DataFrame to sqlite table.
 
     Parameters
     ----------
     con : sqlite3.Connection
-        Database connection object for sqlite3
+        SQLite3 connection to database containing table to write to
     data : pd.DataFrame
-        DataFrame to write to sql table
+        Pandas DataFrame to write to sqlite table
     table_name : str
-        Name of table to update or create
+        Name of table in SQLite database to write to
     if_table_exists : str of {'fail', 'replace', 'append'}, default 'fail'
         * fail: if table exists, do nothing else create table
         * replace: if table exists drop it and recreate table else create table
@@ -187,11 +333,17 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
 
     Notes
     -----
+    * Action taken and total number of row changes are logged accordingly
     * `if_table_exists` options do not raise any errors, rather they dictate the
       corresponding message that is logged/printed to console
-    * Action taken and total number of row changes are logged accordingly
     * Note that `if_table_exists` options follow different semantics than the
       parameter of 'if_exists' parameter in the method `DataFrame.to_sql`
+
+    See Also
+    --------
+    * See Pandas online documentation of the more generalized function used
+      here for the raw IO, `pandas.DataFrame.to_sql` on their for
+      more details on errors and limitations.
     """
     normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
     if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
@@ -259,11 +411,11 @@ def connect_to_sqlite_database(file_path: str) -> sqlite3.Connection:
     ConnectionRefusedError
         * If `sqlite3.Connection` object instantiation fails
 
-    References
-    ----------
-    * For more details on method used to determine corruption/validity of sql
-      file, go to section 'magic header string' on the official sqlite website,
-      'http://www.sqlite.org/fileformat.html'
+    See Also
+    --------
+    * See the section 'magic header string' under the web page 'fileformat'
+      at the online documentation for SQLite, for more information on the
+      method used to determine what constitutes a valid SQLite file.
     """
     file_path_ = os_lib.normalize_path(file_path)
     _prepare_file_for_reading(file_path_, extension='.sql', encoding='utf-8')
@@ -309,8 +461,8 @@ def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
         cursor = con.execute("SELECT * FROM " + table_name)
         columns_in_table = [col[0] for col in cursor.description]
         set_of_columns = set(columns_to_select)
-        if len(columns_to_select) != len(set_of_columns) or not set_of_columns.issubset(
-                columns_in_table):
+        if (len(columns_to_select) != len(set_of_columns) or not
+        set_of_columns.issubset(columns_in_table)):
             raise ValueError('{} is invalid - `columns_to_select` are not a '
                              'unique subset of the columns {} in the table \'{}\'.'
                              .format(tuple(columns_to_select), tuple(columns_in_table), table_name))
@@ -350,8 +502,8 @@ def connect_to_imap_server(server_host: str, user_name: str,
     return connection_client
 
 
-def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL, sender: str='',
-                          subject: str='') -> List[str]:
+def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL, sender: str = '',
+                          subject: str = '') -> List[str]:
     """Return list of unique ids from newest to oldest matching given sender and subject."""
     sender_ = 'FROM ' + sender if sender else None
     subject_ = 'SUBJECT ' + subject if subject else None
