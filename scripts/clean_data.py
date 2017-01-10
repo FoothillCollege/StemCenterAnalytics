@@ -106,7 +106,7 @@ def process_tutor_request_data(if_exists: str) -> None:
     'stem_center_analytics/warehouse/quarter_dates.csv'.
     """
     new_column_names = ('time_of_request', 'wait_time', 'course', 'quarter', 'week_in_quarter', 'day_in_week')
-    old_df = io_lib.read_flat_file_as_df(
+    old_df = io_lib.read_csv_file(
         os_lib.join_path(r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets')
     ).head(500)
     new_rows = []
@@ -120,10 +120,11 @@ def process_tutor_request_data(if_exists: str) -> None:
     new_df.sort_index(axis=0, ascending=True, inplace=True)
 
     with warehouse.connect_to_stem_center_db() as con:
-        io_lib.write_df_to_database(con, new_df, table_name='tutor_requests', if_exists=if_exists)
+        io_lib.write_to_sqlite_table(con, new_df, table_name='tutor_requests', if_table_exists=if_exists)
 
 
 if __name__ == '__main__':
+    # todo: add validation checking for each column...
     # todo: change below to support CLI script options...
     option = 'rebuild'
 
@@ -132,5 +133,5 @@ if __name__ == '__main__':
         process_tutor_request_data(if_exists='append')
 
     if option == 'rebuild':
-        io_lib.create_sql_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
+        io_lib.create_sqlite_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
         process_tutor_request_data(if_exists='replace')

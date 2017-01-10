@@ -1,14 +1,14 @@
 """Generates a json file containing all courses logged in historical data."""
 import re
-import json
 from typing import Iterable, List
 from collections import OrderedDict
 
 from stem_center_analytics import warehouse
 from stem_center_analytics.core import input_validation
+from stem_center_analytics.utils import io_lib
 
 
-def natural_sort(strings: Iterable[str]) -> List[str]:
+def _natural_sort(strings: Iterable[str]) -> List[str]:
     """Return given iterable sorted in natural order.
 
     Natural order is a stricter form of lexicographic, in which numerical
@@ -22,8 +22,7 @@ def natural_sort(strings: Iterable[str]) -> List[str]:
 
 if __name__ == '__main__':
     # ordering of json file: math, phys, bio, chem, engr, cs, OTHER_SUBJECTS
-
-    tutor_log = warehouse.get_tutor_request_data()
+    courses = warehouse.get_set_of_all_courses()
     core_subject_names = list(input_validation.CORE_SUBJECTS.keys())
     other_subject_names = list(input_validation.OTHER_SUBJECTS.keys())
 
@@ -31,14 +30,12 @@ if __name__ == '__main__':
     for subject_name in core_subject_names:
         df_sliced_by_subj_name = tutor_log[tutor_log['course_subject'] == subject_name]
         course_numbers_for_subject = df_sliced_by_subj_name['course_number'].unique()
-        subject_map[subject_name] = natural_sort(strings=course_numbers_for_subject)
+        subject_map[subject_name] = _natural_sort(strings=course_numbers_for_subject)
 
     subject_map['Other'] = []
     for subject_name in other_subject_names:
         df = tutor_log[tutor_log['course_subject'] == subject_name]  # sliced by subject name
-        subject_map['Other'] += natural_sort(
+        subject_map['Other'] += _natural_sort(
             strings=(df['course_subject'] + ' ' + df['course_number']).unique()
         )
-    with open(warehouse.DATA_FILE_PATHS.COURSE_RECORDS, 'w') as json_file:
-        json_string = json.dumps(subject_map)
-        json_file.write(json_string)
+    io_lib.create_json_file(warehouse.DATA_FILE_PATHS.COURSE_RECORDS, subject_map)

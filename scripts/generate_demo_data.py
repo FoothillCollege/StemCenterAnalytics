@@ -17,7 +17,6 @@ File names are generated with the following components:
 * interval: one of 'hour', 'day', or 'week'
 * metric: one of 'waittime' or 'demand'
 """
-import contextlib
 from typing import Iterable, Mapping
 
 import numpy as np
@@ -25,7 +24,7 @@ import pandas as pd
 
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import os_lib, io_lib
-from stem_center_analytics.warehouse import get_tutor_request_data
+from stem_center_analytics import warehouse
 
 
 def _sort_index_by_list(df: pd.DataFrame, rank_order: Iterable[object]) -> pd.DataFrame:
@@ -41,7 +40,7 @@ def _sort_index_by_list(df: pd.DataFrame, rank_order: Iterable[object]) -> pd.Da
     return df_
 
 
-def _aggregate_sc_data(sc_data: pd.DataFrame,
+def _aggregate_sc_data(df: pd.DataFrame,
                        aggregate_option: Mapping[str, callable],
                        interval_type: str) -> pd.DataFrame:
     """Aggregate given DF on given column according to given time interval.
@@ -63,15 +62,15 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
     """
     interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
     if interval_type_ in ('day_in_week', 'week_in_quarter', 'quarter'):
-        col_data = [sc_data.__getattr__(interval_type)]
+        col_data = [df.__getattr__(interval_type)]
     elif interval_type in ('hour', 'month', 'year'):
-        col_data = [sc_data.__getattribute__('index').__getattribute__(interval_type)]
+        col_data = [df.__getattribute__('index').__getattribute__(interval_type)]
     else:
         raise ValueError('Internal error: illegal interval type.')
 
     if len(aggregate_option) != 1:
         raise ValueError('Internal error: only one column can be aggregated on at a time.')
-    aggregated_df = sc_data.groupby(by=col_data).aggregate(aggregate_option)
+    aggregated_df = df.groupby(by=col_data).aggregate(aggregate_option)
 
     if interval_type == 'quarter':  # ordering undefined for quarter strings, so sort output...
         return _sort_index_by_list(
@@ -81,13 +80,13 @@ def _aggregate_sc_data(sc_data: pd.DataFrame,
     return aggregated_df
 
 
-def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
+def compute_metric_on_intervals(df: pd.DataFrame, interval_type: str,
                                 metric_type: str) -> pd.DataFrame:
     """Calculate demand and wait-time metrics given historical tutor requests.
 
     Parameters
     ----------
-    sc_data : pd.DataFrame
+    df : pd.DataFrame
         dataframe containing data to compute on
     interval_type : {hour, day_in_week, week_in_quarter, month, quarter, year}
         interval to compute metric on
@@ -97,18 +96,18 @@ def compute_metric_on_intervals(sc_data: pd.DataFrame, interval_type: str,
 
     Notes
     -----
-    Unlike aggregate sc_data, parameters are parsed.
+    * Unlike aggregate sc_data, parameters are parsed.
     """
     metric_type_ = input_validation.METRIC_LABEL_NAMES.parse(metric_type)
     interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
-    # print(interval_type, '===>', interval_type_)
+    print(df)
     if metric_type_ == 'demand':
         aggregate_mappings = {'quarter': np.count_nonzero}  # arbitrary column name for counting
     elif metric_type_ == 'wait_time':
         aggregate_mappings = {'wait_time': np.mean}  # explicitly give column to average on
     else:
         raise ValueError('Internal Error')
-    return _aggregate_sc_data(sc_data, aggregate_option=aggregate_mappings,
+    return _aggregate_sc_data(df, aggregate_option=aggregate_mappings,
                               interval_type=interval_type_)
 
 
@@ -131,8 +130,7 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
         }
         interval_ = 'week' if interval_ == 'week_in_quarter' else interval_
         file_name = 'time_range={}&interval={}.json'.format(range_, interval_)
-        io_lib.write_json_file(file_path=os_lib.join_path(output_dir, file_name),
-                               contents=data)
+        io_lib.create_json_file(file_path=os_lib.join_path(output_dir, file_name), contents=data)
 
     if len(set(requests_in_quarter['quarter'])) != 1:
         raise ValueError('Given data must contain only one quarter type (eg: \'Fall 2015\').')
@@ -161,12 +159,11 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
 
 
 def main():
-    df = get_tutor_request_data()
+    df = warehouse.get_tutor_request_data()
     root_output_dir = os_lib.normalize_path(
         path=r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets\pre_generated_data'
     )
-    with contextlib.suppress(OSError):
-        os_lib.remove_directory(root_output_dir)  # clear the dir if exists
+    os_lib.remove_directory(root_output_dir, ignore_errors=True)  # clear the dir if exists
     os_lib.create_directory(root_output_dir)
     for quarter_name in df['quarter'].unique():
         output_sub_dir = os_lib.join_path(root_output_dir, quarter_name.replace(' ', '_'))
