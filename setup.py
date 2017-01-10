@@ -1,9 +1,9 @@
-"""Setup script for StemAnalytics."""
+"""Setup script for StemCenterAnalytics."""
 from setuptools import setup, find_packages
 
 setup(
     # ------------------------- Project Implementation Details/Requirements ------------------------
-    name="STEM Analytics Backend",
+    name="STEM Center Analytics: Backend",
     version="0.1.0",
 
     packages=find_packages(),  # - or find_packages(where='stem_center_analytics')
