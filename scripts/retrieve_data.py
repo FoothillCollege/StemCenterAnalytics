@@ -4,7 +4,6 @@ import os
 import dev_settings  # import the set env variables
 from stem_center_analytics.utils import os_lib, io_lib
 
-
 ATTACHMENTS = ('unclean_tutor_requests', 'unclean_student_logins')  # for use later on
 
 
@@ -38,6 +37,7 @@ if __name__ == '__main__':
     main()
 
 
+# todo: add temporary file download with this (using tempfile perhaps...)
 # todo: figure out how to deal with multiple file attachments, multiple unread, etc...
 # todo: figure out how to deal with persisting the temporary attachment through the various scripts
 # todo: figure out details of logging traceback in the case of failed download
