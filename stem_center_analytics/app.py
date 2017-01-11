@@ -124,7 +124,7 @@ def _get_file(quarter: str, time_range_type: str,
         quarter.replace('+', ' ').replace(' ', '_'),
         'time_range={}+{}&interval={}.json'
     ).format(time_range_type, time_range.replace('+', ' ').replace(' ', '_'), interval)
-    return jsonify(io_lib.read_json_file(matched_file))
+    return io_lib.read_json_file(matched_file)
 
 
 # fixme: add dispatching error handling for invalid tokens in url routes
