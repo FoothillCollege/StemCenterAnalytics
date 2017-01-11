@@ -462,7 +462,7 @@ def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
         columns_in_table = [col[0] for col in cursor.description]
         set_of_columns = set(columns_to_select)
         if (len(columns_to_select) != len(set_of_columns) or not
-        set_of_columns.issubset(columns_in_table)):
+                set_of_columns.issubset(columns_in_table)):
             raise ValueError('{} is invalid - `columns_to_select` are not a '
                              'unique subset of the columns {} in the table \'{}\'.'
                              .format(tuple(columns_to_select), tuple(columns_in_table), table_name))
