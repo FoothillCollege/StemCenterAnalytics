@@ -41,15 +41,14 @@ def get_tutor_request_data(columns_to_use: Sequence[str]=(), as_unique: bool=Fal
     * In the case that all columns are retrieved, as_unique has no difference on
       the result, since only distinct rows are allowed in the database table
     """
+    date_columns = []
     if 'time_of_request' in columns_to_use or not columns_to_use:
-        date_columns = ['time_of_request']
-    else:
-        date_columns = None
+        date_columns.append('time_of_request')
 
     with io_lib.connect_to_sqlite_database(DATA_FILE_PATHS.DATABASE) as con:
         data = io_lib.read_sqlite_table(con, 'tutor_requests', as_unique, columns_to_use, date_columns)
         if isinstance(data, pd.DataFrame) and 'wait_time' in data.columns:
-            data['wait_time'] = pd.to_datetime(data['wait_time']).dt.time
+            data['wait_time'] = pd.to_datetime(data['wait_time'], format='%H:%M:%S', exact=True).dt.time
         return data
 
 
@@ -62,15 +61,14 @@ def get_student_login_data(columns_to_use: Sequence[str]=(), as_unique: bool=Fal
     * In the case that all columns are retrieved, as_unique has no difference on
       the result, since only distinct rows are allowed in the database table
     """
+    date_columns = []
     if 'time_of_login' in columns_to_use or not columns_to_use:
-        date_columns = ['time_of_login']
-    else:
-        date_columns = None
+        date_columns.append('time_of_login')
 
     with io_lib.connect_to_sqlite_database(DATA_FILE_PATHS.DATABASE) as con:
         data = io_lib.read_sqlite_table(con, 'tutor_requests', as_unique, columns_to_use, date_columns)
         if isinstance(data, pd.DataFrame) and 'time_in_center' in data.columns:
-            data['time_in_center'] = pd.to_datetime(data['time_in_center']).dt.time
+            data['wait_time'] = pd.to_datetime(data['time_in_center'], format='%H:%M:%S', exact=True).dt.time
         return data
 
 
