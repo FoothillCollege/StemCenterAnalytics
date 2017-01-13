@@ -22,7 +22,7 @@ from typing import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-from stem_center_analytics import warehouse
+from stem_center_analytics import warehouse, PROJECT_DIR
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import os_lib, io_lib
 
@@ -100,6 +100,7 @@ def compute_metric_on_intervals(df: pd.DataFrame, interval_type: str,
     metric_type_ = input_validation.METRIC_LABEL_NAMES.parse(metric_type)
     interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
     print(df)
+
     if metric_type_ == 'demand':
         aggregate_mappings = {'quarter': np.count_nonzero}  # arbitrary column name for counting
     elif metric_type_ == 'wait_time':
@@ -160,7 +161,7 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
 def main():
     df = warehouse.get_tutor_request_data()
     root_output_dir = os_lib.normalize_path(
-        path=r'C:\Users\jperm\Dropbox\StemCenterAnalytics\external_datasets\pre_generated_data'
+        path=os_lib.join_path(PROJECT_DIR, 'external_datasets', 'pre_generated_data')
     )
     os_lib.remove_directory(root_output_dir, ignore_errors=True)  # clear the dir if exists
     os_lib.create_directory(root_output_dir)
