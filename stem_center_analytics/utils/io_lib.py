@@ -253,8 +253,7 @@ def create_sqlite_file(file_path: str, replace_if_exists: bool = False) -> None:
 
     # generate a report for the database update
     action_taken = 'replaced' if file_exists_before_creation else 'created'
-    print(
-        'Database \'{}\' was successfully {}.'.format(os_lib.get_basename(file_path), action_taken))
+    print('Database \'{}\' was successfully {}.'.format(os_lib.get_basename(file_path), action_taken))
 
 
 def read_sqlite_table(con: sqlite3.Connection, table_name: str,
@@ -302,8 +301,7 @@ def read_sqlite_table(con: sqlite3.Connection, table_name: str,
       limitations.
     """
     ensure_table_is_in_database(con, table_name, columns_to_use)
-    index = [columns_to_use[0]] if columns_to_use else [
-        get_all_columns_in_table(con, table_name)[0]]
+    index = [columns_to_use[0]] if columns_to_use else [get_all_columns_in_table(con, table_name)[0]]
 
     query = 'SELECT DISTINCT ' if as_unique else 'SELECT '
     query += ', '.join(columns_to_use) if columns_to_use else '*'
@@ -315,7 +313,7 @@ def read_sqlite_table(con: sqlite3.Connection, table_name: str,
 
 
 def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
-                          table_name: str, if_table_exists: str = 'fail') -> None:
+                          table_name: str, if_table_exists: str='fail') -> None:
     """Write contents of DataFrame to sqlite table.
 
     Parameters
@@ -359,6 +357,7 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
 
     try:
         data.to_sql(name=table_name, con=con, if_exists=if_table_exists)
+
     except Exception as e:
         if isinstance(e, ValueError):  # catch if_table_exists='fail' exception
             pass

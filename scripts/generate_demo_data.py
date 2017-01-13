@@ -56,9 +56,8 @@ def _aggregate_sc_data(df: pd.DataFrame,
 
     Notes
     -----
-        Aggregation is all done on 'wait_time' column, except for counts, in
-        which no specific column is needed.
-        Parameters are not parsed.
+    * Aggregation is all done on 'wait_time' column, except for counts, in
+      which no specific column is needed. Parameters are not parsed.
     """
     interval_type_ = input_validation.TIME_UNIT_LABEL_NAMES.parse(interval_type)
     if interval_type_ in ('day_in_week', 'week_in_quarter', 'quarter'):

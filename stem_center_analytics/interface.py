@@ -107,7 +107,7 @@ class _SCWrapper(object):
         ('2015-08-01 00:00:00', '2015-08-02 03:00:42')
         """
         def parse_datetime_(dt):
-            return pd.to_datetime(prs.parse_datetime(dt))
+            return pd.to_datetime(prs.parse_date(dt))
 
         date_objects = prs.parse_input(user_input=dates, mapping_func=parse_datetime_)
         dates_ = [datetime.datetime.strftime(date, '%Y-%m-%d') for date in date_objects]
@@ -220,14 +220,14 @@ class _SCWrapper(object):
 
         See Also
         --------
-        Visit the docstring of `parse_time_of_day` for more detailed information
+        Visit the docstring of `parse_time` for more detailed information
         on what individual times (on either side of the given dash) are valid.
         """
         if not isinstance(time_range, str) or ' - ' not in time_range:
             raise prs.ParsingError('\'{}\' is invalid - only dashed input is allowed.'.format(time_range))
         start_time, end_time = prs.parse_input(
             user_input=time_range,
-            mapping_func=prs.parse_time_of_day,
+            mapping_func=prs.parse_time,
             values_to_slice=()
         )
         self.data = self.data.between_time(start_time, end_time, include_start=True, include_end=True)
