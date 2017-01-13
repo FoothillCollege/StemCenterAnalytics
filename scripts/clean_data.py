@@ -7,7 +7,6 @@ Notes
 * Profiling in IPython:
     %run -t -N1 scripts\clean_data.py
 """
-import datetime
 from typing import NamedTuple, Union, Tuple
 
 import numpy as np
@@ -18,37 +17,34 @@ from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import io_lib, os_lib
 
 
-quarter_df = warehouse.get_quarter_dates()
-def _extract_time(dt: str, as_datetime=True) -> Union[str, pd.datetime.time]:
-    """Return `dt` parsed to a string of the format 'HH:MM:SS'."""
-    try:
-        parsed_time = input_validation.parse_time_of_day(dt)
-    except input_validation.ParsingError:
-        parsed_time = input_validation.parse_datetime(dt)
-
-    extracted_time = parsed_time.split()[-1]
-    return pd.to_datetime(extracted_time) if as_datetime else extracted_time
-
-
-def _extract_elapsed_time(t1: pd.datetime, t2: pd.datetime, as_datetime=True) -> Union[str, pd.datetime]:
+def _extract_elapsed_time(t1: pd.Timestamp, t2: pd.Timestamp, as_datetime=True) -> Union[str, pd.Timestamp]:
     """Return result of t2 - t1, with all times of string format 'HH:MM:SS'."""
     wait_time = pd.Timedelta(t2 - t1).components
     h, m, s = wait_time.hours, wait_time.minutes, wait_time.seconds
-    return input_validation.parse_time_of_day('{}:{}:{}'.format(h, m, s), as_datetime=as_datetime)
+    return input_validation.parse_time('{}:{}:{}'.format(h, m, s), as_time_object=as_datetime)
 
 
-def _determine_week_in_quarter(date: pd.datetime, quarter_term: str) -> int:
+def _extract_time(dt: str) -> pd.Timestamp.time:
+    """Return time component of string containing datetime or time."""
+    try:
+        return input_validation.parse_time(dt, as_time_object=True)
+    except Exception:
+        return input_validation.parse_datetime(dt, as_timestamp_object=True).time()
+
+
+QUARTERS = warehouse.get_quarter_dates()
+def _determine_week_in_quarter(date: pd.Timestamp, quarter_term: str) -> int:
     """Return week in quarter for given date and quarter term, assuming quarter term is correct."""
     if not quarter_term:
         return np.NaN
-    start_of_qtr = quarter_df.ix[quarter_term]['start_date']
+    start_of_qtr = QUARTERS.ix[quarter_term]['start_date']
     return date.weekofyear - start_of_qtr.weekofyear + 1
 
 
-def _determine_quarter(date: pd.datetime) -> str:
+def _determine_quarter(date: pd.Timestamp) -> str:
     """Return quarter (eg Fall 2013) corresponding to the given date, empty string if no match."""
-    date_range_mask = np.logical_and(quarter_df['start_date'] <= date, date <= quarter_df['end_date'])
-    matched_rows = quarter_df[date_range_mask].index.values
+    date_range_mask = np.logical_and(QUARTERS['start_date'] <= date, date <= QUARTERS['end_date'])
+    matched_rows = QUARTERS[date_range_mask].index.values
     return str(matched_rows[0]) if matched_rows else ''
 
 
@@ -84,21 +80,39 @@ def build_new_tutor_request_row(old_row: NamedTuple) -> \
     * If an old row has a date that does not fall within any quarters, then it is
       not added to the new row.
     """
-    date = input_validation.parse_datetime(str(old_row.Index), as_datetime=True)
-    quarter = _determine_quarter(date)
+    date = input_validation.parse_date(str(old_row.Index), as_date_object=True)
+    time_of_request = pd.Timestamp.combine(
+        date, _extract_time(old_row.time_of_request)
+    )
+    time_of_service = pd.Timestamp.combine(
+        date, _extract_time(old_row.time_of_service)
+    )
+
+    # check it early
+    quarter = _determine_quarter(time_of_request)
     if not quarter:
         return ()
-    start_time = _extract_time(old_row.time_of_request)
-    end_time = _extract_time(old_row.time_of_service)
-    wait_time = _extract_elapsed_time(start_time, end_time)
+    wait_time = _extract_elapsed_time(time_of_request, time_of_service)
     course = input_validation.parse_course(old_row.course_name + ' ' + old_row.course_section)
 
-    week_in_quarter = _determine_week_in_quarter(date, quarter)
+    week_in_quarter = _determine_week_in_quarter(time_of_request, quarter)
     day_in_week = date.toordinal() % 7 + 1  # weekday: sun=1, sat=7
 
-    time_of_request = datetime.datetime.combine(date.date(), start_time.time())
+    return time_of_request, str(wait_time), course, quarter, week_in_quarter, day_in_week
 
-    return time_of_request, wait_time, course, quarter, week_in_quarter, day_in_week
+
+
+def _validate_tutor_request_data(df: pd.DataFrame):
+    """Ensure the data to enter the database is valid."""
+    def select_wait_times_in_range(t1: str, t2: str) -> pd.DataFrame:
+        """Return subset of DataFrame such that t1 <= wait_time <= t2, where t in format HH:MM:SS."""
+        t1_ = input_validation.parse_time(t1, as_time_object=True)
+        t2_ = input_validation.parse_time(t2, as_time_object=True)
+        return df[(df['wait_time'] >= t1_) & (df['wait_time'] <= t2_)]
+
+    select_wait_times_in_range('00:00:00', '00:00:00')
+    df = select_wait_times_in_range(warehouse.get_tutor_request_data(), '00:00:00')
+    pass
 
 
 def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
@@ -138,3 +152,4 @@ if __name__ == '__main__':
 
     if option == 'rebuild':
         process_tutor_request_data(if_exists='replace')
+    #print(warehouse.get_tutor_request_data())
