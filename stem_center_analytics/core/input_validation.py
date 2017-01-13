@@ -73,7 +73,6 @@ class ParserDict(OrderedDict):
                            .format(string, tokens_))
 
 
-
 COL_NAMES = ParserDict(
     ('date',            {'date', 'date_of_request'}),
     ('time_of_request', {'time_of_request', 'time of request', 'start_time', 'start'}),
@@ -151,7 +150,7 @@ TIME_UNIT_VALUES = types.SimpleNamespace(
 )
 
 # official course subject names were referenced
-SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
+#SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
 CORE_SUBJECTS = ParserDict(
     ('Mathematics',      {'mat', 'math', 'mathematics'}),
     ('Physics',          {'phy', 'phys', 'physics'}),
@@ -255,52 +254,51 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
                        '\'LHS - RHS\' where LHS < RHS.'.format(user_input))
 
 
-def parse_datetime(dt: str, as_datetime: bool=False) -> Union[str, pd.datetime]:
+def parse_date(dt: str, as_date_object: bool=False) -> Union[str, datetime.date]:
     """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
 
     Returns
     -------
-    str, if `as_datetime`=True
+    datetime.datetime object, if `as_date_object`=True
+        * If `include_time`=True return parsed result as pandas.datetime object
+    str, if `as_date_object`=False
         * If `include_time`=True return string with the format of
           '%Y-%m-%d %H:%M:%S' with H:M:S zero by default
-    datetime-like, if `as_datetime`=False
-        * If `include_time`=True return parsed result as pandas.datetime object
 
     See Also
     --------
-    * `parse_time_of_day`
+    * `input_validation.parse_time`
     * `pandas.to_datetime`
 
     Examples
     --------
-    >>> parse_datetime('2021-02-22 00:00:00', as_datetime=False)
-    '2021-02-22 00:00:00'
-    >>> parse_datetime('2021-02-22 00:00', as_datetime=False)
-    '2021-02-22 00:00:00'
-    >>> parse_datetime('2021/02/22 22:2:1', as_datetime=False)
-    '2021-02-22 22:02:01'
-    >>> parse_datetime('2021-02-22', as_datetime=False)
-    '2021-02-22 00:00:00'
-    >>> parse_datetime('2011.12.25 00:00:01', as_datetime=False)
-    '2011-12-25 00:00:01'
-    >>> parse_datetime('9/25/2013 11:48 am', as_datetime=False)
-    '2013-09-25 11:48:00'
-    >>> parse_datetime('2015-2-2 00:21:00', as_datetime=True)
-    Timestamp('2015-02-02 00:21:00')
+    >>> parse_date('2021-02-22', as_date_object=False)
+    '2021-02-22'
+    >>> parse_date('2021-02-22', as_date_object=False)
+    '2021-02-22'
+    >>> parse_date('2021/02/22', as_date_object=False)
+    '2021-02-22'
+    >>> parse_date('2021-02-22', as_date_object=False)
+    '2021-02-22'
+    >>> parse_date('2011.12.25', as_date_object=False)
+    '2011-12-25'
+    >>> parse_date('9/25/2013', as_date_object=False)
+    '2013-09-25'
+    >>> parse_date('2015-2-2', as_date_object=True)
+    datetime.date(2015, 2, 2)
     """
     date, _, time = dt.partition(' ')
-    if time == '':
-        time = '00:00:00'
+    if time.replace(' ', '') != '':
+        raise ParsingError('\'{}\' is invalid - only date-like strings can be parsed.'.format(dt))
 
     try:
-        dt_ = pd.to_datetime(date + ' ' + parse_time_of_day(time))
-        return dt_ if as_datetime else dt_.strftime('%Y-%m-%d %H:%M:%S')
+        dt_ = pd.to_datetime(date, infer_datetime_format=True).date()
+        return dt_ if as_date_object else dt_.strftime('%Y-%m-%d')
     except Exception:
-        raise ParsingError('\'{}\' is invalid - date must be recognizable as \'YY-MM-DD\' followed '
-                           'by an optional time of the format \'HH[:MM:SS am/pm]\'.'.format(dt))
+        raise ParsingError('\'{}\' is invalid - cannot be recognized as a date.'.format(date))
 
 
-def parse_time_of_day(time: str, as_datetime: bool=False) -> Union[str, pd.datetime.time]:
+def parse_time(time: str, as_time_object: bool=False) -> Union[str, datetime.time]:
     """Parse string representing time of day to a format 'HH:MM:SS'.
 
     Parameters
@@ -309,39 +307,44 @@ def parse_time_of_day(time: str, as_datetime: bool=False) -> Union[str, pd.datet
         Represents time of day in format 'hour[:minutes[:seconds][am/pm]'.
         Hour is required, 24 hour format assumed, unless time ends with am/pm.
         Minutes (prefixed by colon) is optional, assumed to be 0 if not given.
-    as_datetime : bool, default False
+    as_time_object : bool, default False
         Determine if value to return is string or datetime object
 
     Returns
     -------
-    * If `parse_to_datetime` is True : datetime-like object
-        Pandas.datetime.time object
-    * If `parse_to_datetime` is False : string
+    * If `as_time_object` is True : datetime.time object
+        datetime.time object
+    * If `as_time_object` is False : string
         Parsed time of day in format 'HH:MM:SS'
 
     Raises
     ------
     ParsingError if none of the above `time` conditions are met.
 
+    See Also
+    --------
+    * `input_validation.parse_date`
+    * `pandas.to_datetime`
+
     Examples
     --------
-    >>> parse_time_of_day('12:00am', as_datetime=False)
+    >>> parse_time('12:00am', as_time_object=False)
     '00:00:00'
-    >>> parse_time_of_day('12:03:02 AM', as_datetime=False)
+    >>> parse_time('12:03:02 AM', as_time_object=False)
     '00:03:02'
-    >>> parse_time_of_day('9am', as_datetime=False)
+    >>> parse_time('9am', as_time_object=False)
     '09:00:00'
-    >>> parse_time_of_day('10:31', as_datetime=False)
+    >>> parse_time('10:31', as_time_object=False)
     '10:31:00'
-    >>> parse_time_of_day('6:17 pm', as_datetime=False)
+    >>> parse_time('6:17 pm', as_time_object=False)
     '18:17:00'
-    >>> parse_time_of_day('15', as_datetime=False)
+    >>> parse_time('15', as_time_object=False)
     '15:00:00'
-    >>> parse_time_of_day('1:01:59 pm', as_datetime=False)
+    >>> parse_time('1:01:59 pm', as_time_object=False)
     '13:01:59'
-    >>> parse_time_of_day('1:01:59 PM', as_datetime=False)
+    >>> parse_time('1:01:59 PM', as_time_object=False)
     '13:01:59'
-    >>> parse_time_of_day('00:31:00', as_datetime=True)
+    >>> parse_time('00:31:00', as_time_object=True)
     datetime.time(0, 31)
     """
     time_string = time.lower().replace(' ', '')
@@ -353,13 +356,58 @@ def parse_time_of_day(time: str, as_datetime: bool=False) -> Union[str, pd.datet
         inferred_format += '%p'
 
     try:
-        dt = datetime.datetime.strptime(time_string, inferred_format)
-        parsed_time = ':'.join([('0' if 0 <= t <= 9 else '') + str(t)
-                               for t in (dt.hour, dt.minute, dt.second)])
-        return pd.to_datetime(parsed_time).time() if as_datetime else parsed_time
+        time_object = pd.to_datetime(
+            time_string, format=inferred_format, exact=True, infer_datetime_format=True
+        ).time()
+        return time_object if as_time_object else str(time_object)
     except ValueError:
-        raise ParsingError('\'{}\' is invalid - time must be of format '
-                           '\'HH[:MM:SS] [am/pm]\'.'.format(time.strip())) from None
+        raise ParsingError('\'{}\' is invalid - cannot be recognized as a time.'.format(time))
+
+
+def parse_datetime(dt: str, as_timestamp_object: bool=False) -> Union[str, pd.Timestamp]:
+    """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
+
+    Returns
+    -------
+    datetime.datetime object
+        * If `as_datetime_object`=True
+    str
+        * If `as_datetime_object`=False
+            * If time given, string of format '%Y-%m-%d %H:%M:%S'
+            * If time not given, string of format '%Y-%m-%d 00:00:00'
+
+    See Also
+    --------
+    * `input_validation.parse_time`
+    * `input_validation.parse_date`
+    * `pandas.to_datetime`
+
+    Examples
+    --------
+    >>> parse_datetime('2021-02-22 00:00:00', as_timestamp_object=False)
+    '2021-02-22 00:00:00'
+    >>> parse_datetime('2021-02-22 00:00', as_timestamp_object=False)
+    '2021-02-22 00:00:00'
+    >>> parse_datetime('2021/02/22 22:2:1', as_timestamp_object=False)
+    '2021-02-22 22:02:01'
+    >>> parse_datetime('2021-02-22', as_timestamp_object=False)
+    '2021-02-22 00:00:00'
+    >>> parse_datetime('2011.12.25 00:00:01', as_timestamp_object=False)
+    '2011-12-25 00:00:01'
+    >>> parse_datetime('9/25/2013 11:48 am', as_timestamp_object=False)
+    '2013-09-25 11:48:00'
+    >>> parse_datetime('2015-2-2 00:21:00', as_timestamp_object=True)
+    Timestamp('2015-02-02 00:21:00')
+    """
+    date, _, time = ' '.join(dt.split()).partition(' ')
+    try:
+        date_ = parse_date(date, as_date_object=True) if date else None
+        time_ = parse_time(time, as_time_object=True) if time else datetime.time(0, 0, 0)
+        dt_ = pd.Timestamp.combine(date_, time_)
+        return dt_ if as_timestamp_object else dt_.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        raise ParsingError('\'{}\' is invalid - must consist of a valid date '
+                           'followed by an optional valid time.'.format(dt))
 
 
 def parse_quarter(quarter: str, with_year: bool=True) -> str:
@@ -449,6 +497,7 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
     >>> parse_course('Comp Sci 1B')
     'Computer Science 1B'
     """
+    set_of_all_courses = warehouse.get_set_of_all_courses()
     course_name_ = ' '.join(course_name.split()).lower()
     first_digit_position = next((k for k, char in enumerate(course_name_) if char.isdigit()), -1)
     if first_digit_position == -1:  # assume subject if input has no digits
@@ -459,30 +508,30 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
 
     # an 'f' padding number will be at the end of subject string since input sliced at 1st digit
     subject = re.sub('(\. f|\.| f)?$', '', subject)  # remove trailing '.', ' f', '. f'
-    number = re.sub('^0{,2}|(\.)?$', '', number)  # remove up to 3 leading 0s and 1 trailing '.'
-    section = re.sub('^0|o', '', section)  # remove leading occurrence of o or 0
+    number = re.sub('^0{,2}|(\.)?$', '', number)     # remove up to 3 leading 0s and 1 trailing '.'
+    section = re.sub('^0|o', '', section)            # remove leading occurrence of o or 0
     if not check_records:
-        subject_ = ALL_SUBJECTS.parse(subject)  # let it raise
+        subject_ = ALL_SUBJECTS.parse(subject)       # let it raise
         return ' '.join([subject_, number, section]).strip(' ')
 
-    # otherwise, check records, and if not available report the reason for missing
+    # --------- otherwise, check records, and if not available report the reason for missing
     try:
         subject = ALL_SUBJECTS.parse(subject)
-        if subject not in SET_OF_ALL_COURSES:
+        if subject not in set_of_all_courses:
             raise ParsingError
     except ParsingError:
         raise ParsingError('Subject \'{}\' is not on record.'.format(subject)) from None
 
     full_course_name = ' '.join([subject, number, section]).strip(' ')
-    if full_course_name in SET_OF_ALL_COURSES:
+    if full_course_name in set_of_all_courses:
         return full_course_name
 
     # full course name not record: check if it was due to unavailable course section/number
     course_name_without_section = ' '.join([subject, number]).strip(' ')
-    if course_name_without_section in SET_OF_ALL_COURSES:
+    if course_name_without_section in set_of_all_courses:
         raise ParsingError('Course \'{}\' has no section \'{}\' on record.'
                            .format(course_name_without_section, section))
-    if subject in SET_OF_ALL_COURSES:
+    if subject in set_of_all_courses:
         raise ParsingError('Subject \'{}\' has no course number \'{}\' on record.'
                            .format(subject, number))
     raise ParsingError('\'{}\' cannot be recognized - course name requires a recognizable'
