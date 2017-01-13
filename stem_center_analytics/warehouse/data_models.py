@@ -8,6 +8,7 @@ import sqlite3
 from collections import namedtuple
 from typing import Sequence, Tuple, Union, Dict, List, Set
 
+import numpy as np
 import pandas as pd
 
 from stem_center_analytics.utils import io_lib, os_lib
@@ -32,7 +33,7 @@ def get_quarter_dates() -> pd.DataFrame:
 
 
 def get_tutor_request_data(columns_to_use: Sequence[str]=(), as_unique: bool=False) \
-        -> Union[pd.DataFrame, pd.Series]:
+        -> Union[pd.DataFrame, np.ndarray]:
     """Return DataFrame of tutor requests from the database.
 
     Notes
@@ -46,10 +47,14 @@ def get_tutor_request_data(columns_to_use: Sequence[str]=(), as_unique: bool=Fal
         date_columns = None
 
     with io_lib.connect_to_sqlite_database(DATA_FILE_PATHS.DATABASE) as con:
-        return io_lib.read_sqlite_table(con, 'tutor_requests', as_unique, columns_to_use, date_columns)
+        data = io_lib.read_sqlite_table(con, 'tutor_requests', as_unique, columns_to_use, date_columns)
+        if isinstance(data, pd.DataFrame) and 'wait_time' in data.columns:
+            data['wait_time'] = pd.to_datetime(data['wait_time']).dt.time
+        return data
 
 
-def get_student_login_data(columns_to_use: Sequence[str]=(), as_unique: bool=False) -> pd.DataFrame:
+def get_student_login_data(columns_to_use: Sequence[str]=(), as_unique: bool=False) \
+        -> Union[pd.DataFrame, np.ndarray]:
     """Return DataFrame of student logins from the database.
 
     Notes
@@ -63,8 +68,10 @@ def get_student_login_data(columns_to_use: Sequence[str]=(), as_unique: bool=Fal
         date_columns = None
 
     with io_lib.connect_to_sqlite_database(DATA_FILE_PATHS.DATABASE) as con:
-        return io_lib.read_sqlite_table(con, 'student_logins', as_unique, columns_to_use,
-                                        date_columns)
+        data = io_lib.read_sqlite_table(con, 'tutor_requests', as_unique, columns_to_use, date_columns)
+        if isinstance(data, pd.DataFrame) and 'time_in_center' in data.columns:
+            data['time_in_center'] = pd.to_datetime(data['time_in_center']).dt.time
+        return data
 
 
 def get_course_records() -> Dict[str, List[str]]:
