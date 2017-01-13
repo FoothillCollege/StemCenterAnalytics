@@ -52,7 +52,7 @@ def _prepare_file_for_reading(file_path: str, extension: str, encoding: str) -> 
 
 # -------------------------------------------- CSV IO ----------------------------------------------
 def create_csv_file(file_path: str, data: Union[np.ndarray, pd.Series, pd.DataFrame],
-                    replace_if_exists: bool = False) -> None:
+                    replace_if_exists: bool=False) -> None:
     """Create CSV file containing given data.
 
     Parameters
@@ -98,7 +98,7 @@ def create_csv_file(file_path: str, data: Union[np.ndarray, pd.Series, pd.DataFr
         return df.to_csv(path_or_buf=file_path_, mode='x', encoding='utf-8')
 
 
-def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]] = ()) \
+def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]]=()) \
         -> Union[np.ndarray, pd.DataFrame]:
     """Retrieve contents of a csv file.
 
@@ -138,7 +138,7 @@ def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]] = ()) 
 
 
 # -------------------------------------------- JSON IO ---------------------------------------------
-def create_json_file(file_path: str, contents: Any, replace_if_exists: bool = True) -> None:
+def create_json_file(file_path: str, contents: Any, replace_if_exists: bool=True) -> None:
     """Create JSON file containing given data.
 
     Parameters
@@ -257,8 +257,8 @@ def create_sqlite_file(file_path: str, replace_if_exists: bool = False) -> None:
 
 
 def read_sqlite_table(con: sqlite3.Connection, table_name: str,
-                      as_unique: bool, columns_to_use: Sequence[str] = (),
-                      date_columns: Sequence[str] = ()) -> Union[np.ndarray, pd.DataFrame]:
+                      as_unique: bool, columns_to_use: Sequence[str]=(),
+                      datetime_columns: Sequence[str]=()) -> Union[np.ndarray, pd.DataFrame]:
     """Retrieve contents of table in a sqlite database.
 
     Parameters
@@ -275,7 +275,7 @@ def read_sqlite_table(con: sqlite3.Connection, table_name: str,
         * Use `columns_to_use` if non-empty, otherwise use all columns in table,
           in both cases the columns are queried in order given, with first
           column as index.
-    date_columns : array-like of strings, default ()
+    datetime_columns : array-like of strings, default ()
         * Columns to parse to datetime
 
     Returns
@@ -308,7 +308,7 @@ def read_sqlite_table(con: sqlite3.Connection, table_name: str,
     query += ' FROM ' + table_name
 
     # if the queried df has no columns,get_tutor_request_data than
-    df = pd.read_sql(sql=query, con=con, index_col=index, parse_dates=date_columns)
+    df = pd.read_sql(sql=query, con=con, index_col=index, parse_dates=datetime_columns)
     return df if len(df.columns) != 0 else df.index.values
 
 
@@ -449,7 +449,7 @@ def is_table_in_database(con: sqlite3.Connection, table_name: str) -> bool:
 
 
 def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
-                                columns_to_select: Sequence[str] = None) -> None:
+                                columns_to_select: Sequence[str]=None) -> None:
     """Raise ValueError if exact given table_name is not in con. If columns_to_select check for existence."""
     table_query = 'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?'
     is_table_in_database_ = bool(con.execute(table_query, [table_name]).fetchone())
