@@ -23,7 +23,7 @@ import email
 import codecs
 import imaplib
 import sqlite3
-from typing import Sequence, Union, List, Any
+from typing import Sequence, Mapping, Union, List, Any
 
 import numpy as np
 import pandas as pd
@@ -98,7 +98,7 @@ def create_csv_file(file_path: str, data: Union[np.ndarray, pd.Series, pd.DataFr
         return df.to_csv(path_or_buf=file_path_, mode='x', encoding='utf-8')
 
 
-def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]]=()) \
+def read_csv_file(file_path: str, num_rows: int=None, date_columns: Sequence[Union[str, int]] = ()) \
         -> Union[np.ndarray, pd.DataFrame]:
     """Retrieve contents of a csv file.
 
@@ -106,6 +106,8 @@ def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]]=()) \
     ----------
     file_path : string
         File path to read as utf-8 encoded CSV
+    num_rows : int
+        Number of rows to read from csv, all rows read if None
     date_columns : array-like of strings, default ()
         * Columns to parse to datetime, as per ISO-8601 datetime standards
 
@@ -132,7 +134,7 @@ def read_csv_file(file_path: str, date_columns: Sequence[Union[str, int]]=()) \
     if os_lib.is_empty_file(file_path):
         return pd.DataFrame()
 
-    data = pd.read_csv(filepath_or_buffer=file_path_, index_col=0, squeeze=True,
+    data = pd.read_csv(filepath_or_buffer=file_path_, index_col=0, squeeze=True, nrows=num_rows,
                        parse_dates=date_columns_, encoding='utf-8', infer_datetime_format=True)
     return data.values if isinstance(data, pd.Series) else data
 
@@ -206,7 +208,7 @@ def read_json_file(file_path: str) -> Any:
 
 
 # ------------------------------------------ DATABASE IO -------------------------------------------
-def create_sqlite_file(file_path: str, replace_if_exists: bool = False) -> None:
+def create_sqlite_file(file_path: str, replace_if_exists: bool=False) -> None:
     """Create SQL file if path is available and connection is successful.
 
     Parameters
@@ -313,29 +315,36 @@ def read_sqlite_table(con: sqlite3.Connection, table_name: str,
 
 
 def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
-                          table_name: str, if_table_exists: str='fail') -> None:
+                          table_name: str, if_table_exists: str='fail',
+                          data_types: Mapping[str, type]=None) -> None:
     """Write contents of DataFrame to sqlite table.
 
     Parameters
     ----------
     con : sqlite3.Connection
         SQLite3 connection to database containing table to write to
-    data : pd.DataFrame
+    data : pandas.DataFrame
         Pandas DataFrame to write to sqlite table
-    table_name : str
+    table_name : string
         Name of table in SQLite database to write to
     if_table_exists : str of {'fail', 'replace', 'append'}, default 'fail'
+        Action to take upon an existing table
         * fail: if table exists, do nothing else create table
         * replace: if table exists drop it and recreate table else create table
         * append: if table exists, insert at end of table, else do nothing
+    data_types : Mapping of string to type, default None
+        Column name to data type mapping. Any unspecified columns have their
+        data types inferred by pandas. Note that for inferred data types,
+        unintended formatting issues may occur during writing.
+        For example, datetime.time with a string representation of 'HH:MM:SS'
+        is written in the format 'HH:MM:SS.000000' when no data type is given
 
     Notes
     -----
-    * Action taken and total number of row changes are logged accordingly
-    * `if_table_exists` options do not raise any errors, rather they dictate the
-      corresponding message that is logged/printed to console
-    * Note that `if_table_exists` options follow different semantics than the
-      parameter of 'if_exists' parameter in the method `DataFrame.to_sql`
+    * Assuming valid table name and `if_table_exists` options, no errors
+      are raised during writing. Instead, a message is logged to describing:
+          * action taken: replaced, appended, failed, or created
+          * total number of row changes during the transaction
 
     See Also
     --------
@@ -343,6 +352,7 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
       here for the raw IO, `pandas.DataFrame.to_sql` on their for
       more details on errors and limitations.
     """
+    # fixme: datatypes with str and fractional timestamp doesn't always resolve correctly
     normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
     if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
         raise ValueError('Given table name \'{}\' is invalid - only letters, digits, spaces, '
@@ -356,8 +366,7 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
         ensure_table_is_in_database(con, 'tutor_requests')
 
     try:
-        data.to_sql(name=table_name, con=con, if_exists=if_table_exists)
-
+        data.to_sql(name=table_name, con=con, if_exists=if_table_exists, dtype=data_types)
     except Exception as e:
         if isinstance(e, ValueError):  # catch if_table_exists='fail' exception
             pass
@@ -368,7 +377,7 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
     # generate a report for the database update
     deciding_factors = (if_table_exists, table_is_in_db)
     outcomes = {
-        ('fail', True): 'Table \'{}\' cannot be created - if_table_exists=\'fail\'',
+        ('fail', True): 'Table \'{}\' cannot be created',
         ('fail', False): 'Table \'{}\' successfully created',
         ('append', True): 'Table \'{}\' successfully appended to',
         ('append', False): 'Cannot append to non-existent table \'{}\' - append failed',
@@ -376,6 +385,7 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
         ('replace', False): 'Cannot replace non-existent table \'{}\' - created instead'
     }
     outcome = outcomes[deciding_factors].format(table_name)
+    outcome += ' (`if_table_exists`=\'{}\').'.format(if_table_exists)
     print('\nLatest changes to db @ {}...'
           '\n   {} ({:,} row changes).'
           .format(con, outcome, con.total_changes))
@@ -450,7 +460,16 @@ def is_table_in_database(con: sqlite3.Connection, table_name: str) -> bool:
 
 def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
                                 columns_to_select: Sequence[str]=None) -> None:
-    """Raise ValueError if exact given table_name is not in con. If columns_to_select check for existence."""
+    """Valid if table in database present at connection.
+
+    Raises
+    ------
+    ValueError
+        * If `table_name` is not in the database connected to via `con`
+        * If `columns_to_select` are not a unique subset of columns
+          that exist in the database table. That is, no duplicates
+          are allowed, all the column names must be present in the table
+    """
     table_query = 'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?'
     is_table_in_database_ = bool(con.execute(table_query, [table_name]).fetchone())
     if not is_table_in_database_:
@@ -468,14 +487,80 @@ def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
 
 
 # ----------------------------------------- IMAP SERVER IO -----------------------------------------
+def connect_to_imap_server(server_host: str, user_name: str,
+                           user_password: str) -> imaplib.IMAP4_SSL:
+    """Connect to an IMAP enabled email server.
+
+    Parameters
+    ----------
+    server_host : string
+        IMAP server hostname to use
+        'imap.gmail.com' -> gmail
+    user_name : string
+        Email address as a username for server login
+    user_password : string
+        User password for server login
+
+    Returns
+    -------
+    imaplib.IMAP4_SSL
+        SSL connection to an IMAP enabled email server
+
+    Notes
+    -----
+    * Currently only tested with gmail
+    * For using the connection, ``con.uid`` is recommended as it denotes unique
+      identifiers, whereas ``con.id`` does not. General syntax for
+      common operations:
+        * ``con.uid('STORE', ...)`` -> for mutating information
+        * ``con.uid('FETCH', ...)`` -> for retrieving information, etc
+
+    See Also
+    --------
+    * `download_all_email_attachments`
+    * `get_unread_email_uids`
+    * `imaplib.IMAP4_SSL`
+    """
+    # todo: add more to notes and references
+    connection_client = imaplib.IMAP4_SSL(server_host)
+    connection_client.login(user_name, user_password)
+    connection_client.select()
+    return connection_client
+
+
 def download_all_email_attachments(imap_connection: imaplib.IMAP4_SSL, email_uid: str,
                                    output_dir: str) -> List[str]:
-    """Download all attachment files for a given unique email id.
+    """Download all file attachments present at unique email id.
 
-    Return downloaded file paths, whether the download(s) were successful or not.
+    Parameters
+    ----------
+    imap_connection : imaplib.IMAP4_SSL object
+        SSL connection to an IMAP enabled email server
+    email_uid : string
+        Unique email ID to download all attachments from
+    output_dir : string
+        Directory to download all files to.
+        Attachment names determine filenames to use
+
+    Returns
+    -------
+    list of string
+        File paths of downloaded attachments.
+        All file paths are returned, regardless of whether the downloads
+        were successful or not
+
+    Notes
+    -----
+    * Currently only tested with gmail
+    * 'RFC822' is the protocol used, so all files are marked as read
+
+    See Also
+    --------
+    * `connect_to_imap_server`
+    * `get_unread_email_uids`
+    * `imaplib.IMAP4_SSL`
     """
-    # todo: add temporary file option
-    # todo: add further docs, detailing assumptions, requirements, imap, gmail, etc.
+    # todo: add temporary file option (or not an option and return temp dir containing files)
     file_paths = []
     email_body = imap_connection.uid('FETCH', email_uid, '(RFC822)')[1][0][1]  # read the message
     message = email.message_from_bytes(email_body)
@@ -488,22 +573,29 @@ def download_all_email_attachments(imap_connection: imaplib.IMAP4_SSL, email_uid
     return file_paths
 
 
-def connect_to_imap_server(server_host: str, user_name: str,
-                           user_password: str) -> imaplib.IMAP4_SSL:
-    """Connect to an IMAP server - note, the server must have app security settings lowered."""
-    # note: use con.uid for dealing with unique email ids (like in this project), and
-    # put the command (eg STORE) in quotes as the first argument like con.uid('STORE', ...)
-    # instead of con.store(..), in the case of a non unique (sequential) id
-    # todo: add further docs, detailing assumptions, requirements, imap, gmail, etc.
-    connection_client = imaplib.IMAP4_SSL(server_host)
-    connection_client.login(user_name, user_password)
-    connection_client.select()
-    return connection_client
+def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL, sender: str='',
+                          subject: str='') -> List[str]:
+    """Retrieve unique email ids for each unread message matching given criteria.
 
+    Parameters
+    ----------
+    imap_connection : imaplib.IMAP4_SSL object
+        SSL connection to an IMAP enabled server
+    sender : string, default ''
+        Desired sender email address to filter messages by
+    subject : string, default ''
+        Desired subject to filter messages by
 
-def get_unread_email_uids(imap_connection: imaplib.IMAP4_SSL, sender: str = '',
-                          subject: str = '') -> List[str]:
-    """Return list of unique ids from newest to oldest matching given sender and subject."""
+    Returns
+    -------
+    list of strings
+        Unique email IDs of all unread emails matching `sender` and `subject`
+        present at the IMAP server. IDs are ordered from newest to oldest
+
+    Notes
+    -----
+    * Currently only tested with gmail
+    """
     sender_ = 'FROM ' + sender if sender else None
     subject_ = 'SUBJECT ' + subject if subject else None
     email_uid = imap_connection.uid('SEARCH', sender_, subject_, 'UNSEEN')[1][0].split()
