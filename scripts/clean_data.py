@@ -16,6 +16,18 @@ from stem_center_analytics import warehouse, PROJECT_DIR
 from stem_center_analytics.core import input_validation
 from stem_center_analytics.utils import io_lib, os_lib
 
+def _validate_tutor_request_data(df: pd.DataFrame):
+    """Ensure the data to enter the database is valid."""
+    def select_wait_times_in_range(t1: str, t2: str) -> pd.DataFrame:
+        """Return subset of DataFrame such that t1 <= wait_time <= t2, where t in format HH:MM:SS."""
+        t1_ = input_validation.parse_time(t1, as_time_object=True)
+        t2_ = input_validation.parse_time(t2, as_time_object=True)
+        return df[(df['wait_time'] >= t1_) & (df['wait_time'] <= t2_)]
+
+    select_wait_times_in_range('00:00:00', '00:00:00')
+    df = select_wait_times_in_range(warehouse.get_tutor_request_data(), '00:00:00')
+    pass
+
 
 def _extract_elapsed_time(t1: pd.Timestamp, t2: pd.Timestamp, as_datetime=True) -> Union[str, pd.Timestamp]:
     """Return result of t2 - t1, with all times of string format 'HH:MM:SS'."""
@@ -93,38 +105,22 @@ def build_new_tutor_request_row(old_row: NamedTuple) -> \
     if not quarter:
         return ()
     wait_time = _extract_elapsed_time(time_of_request, time_of_service)
-    course = input_validation.parse_course(old_row.course_name + ' ' + old_row.course_section)
-
-    week_in_quarter = _determine_week_in_quarter(time_of_request, quarter)
-    day_in_week = date.toordinal() % 7 + 1  # weekday: sun=1, sat=7
 
     return time_of_request, str(wait_time), course, quarter, week_in_quarter, day_in_week
-
-
-
-def _validate_tutor_request_data(df: pd.DataFrame):
-    """Ensure the data to enter the database is valid."""
-    def select_wait_times_in_range(t1: str, t2: str) -> pd.DataFrame:
-        """Return subset of DataFrame such that t1 <= wait_time <= t2, where t in format HH:MM:SS."""
-        t1_ = input_validation.parse_time(t1, as_time_object=True)
-        t2_ = input_validation.parse_time(t2, as_time_object=True)
-        return df[(df['wait_time'] >= t1_) & (df['wait_time'] <= t2_)]
-
-    select_wait_times_in_range('00:00:00', '00:00:00')
-    df = select_wait_times_in_range(warehouse.get_tutor_request_data(), '00:00:00')
-    pass
 
 
 def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
     """Clean data and add to database, if_exists: {'replace', 'append', 'fail'}.
 
-    Note that any row with dates falling outside the range of quarters specified in
-    'stem_center_analytics/warehouse/quarter_dates.csv'.
+    Note that any row with dates falling outside the range of quarters
+    specified in 'stem_center_analytics/warehouse/quarter_dates.csv'
+    will NOT be added to the dataframe that is written to the database
     """
     new_column_names = ('time_of_request', 'wait_time', 'course', 'quarter', 'week_in_quarter', 'day_in_week')
     old_df = io_lib.read_csv_file(
         os_lib.join_path(PROJECT_DIR, 'external_datasets', 'unclean_tutor_requests.csv')
     )
+
     new_rows = []
     for row in old_df.itertuples():
         new_row = build_new_tutor_request_row(row)
@@ -132,24 +128,27 @@ def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
             new_rows.append(new_row)
 
     new_df = pd.DataFrame.from_records(data=new_rows, index=new_column_names[0], columns=new_column_names)
-    new_df = new_df.groupby(new_df.index).first()  # todo: replace with second increment for duplicates
+    new_df = new_df.groupby(new_df.index).first()  # todo: replace with a single second increment for duplicates
     new_df.sort_index(axis=0, ascending=True, inplace=True)
 
     if replace_db:
         io_lib.create_sqlite_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
     with warehouse.connect_to_stem_center_db() as con:
-        io_lib.write_to_sqlite_table(con, new_df, table_name='tutor_requests', if_table_exists=if_exists)
-
+        io_lib.write_to_sqlite_table(con, new_df, table_name='tutor_requests',
+                                     if_table_exists=if_exists, data_types={'wait_time': str})
 
 if __name__ == '__main__':
-    # todo: add validation checking for each column...
-    # todo: change below to support CLI script options...
+    # todo: add validation checking for each column
+    # todo: change below to support CLI script options
     option = 'rebuild'
 
     if option == 'append':
-        # fixme: doesn't work at the moment...
+        # fixme: append option is currently broken
         process_tutor_request_data(if_exists='append')
 
     if option == 'rebuild':
         process_tutor_request_data(if_exists='replace')
-    #print(warehouse.get_tutor_request_data())
+        #print(warehouse.get_tutor_request_data())
+
+
+# todo: enhance performance: try benchmarking with shorter, abbreviated names, both in writing and reading
