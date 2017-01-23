@@ -2,7 +2,15 @@
 
 Notes
 -----
-* Data assumptions and definitions to be added here later.
+* This module contains only data retrieval since data is not intended to be
+  written inside the source directory, only read. Instead, updating the core
+  data sources is intended to occur in the script directory (containing the
+  automated data pipeline) only, via importing DATA_FILE_PATHS and io_lib,
+  respectively.
+* This allows all code within the source to assume 'perfect' data, with the
+  following assumptions:
+  * ??
+  * ??
 """
 import sqlite3
 from collections import namedtuple
@@ -12,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from stem_center_analytics.utils import io_lib, os_lib
+
 
 # create a struct-like mapping for the three main data-source file paths
 WAREHOUSE_DIR = os_lib.normalize_path(os_lib.get_parent_dir(__file__))
@@ -29,7 +38,7 @@ def connect_to_stem_center_db() -> sqlite3.Connection:
 
 def get_quarter_dates() -> pd.DataFrame:
     """Return DataFrame of all (manually entered) quarter start, end dates."""
-    return io_lib.read_csv_file(DATA_FILE_PATHS.QUARTER_DATES, date_columns=[1, 2])
+    return io_lib.read_csv_file(DATA_FILE_PATHS.QUARTER_DATES, num_rows=None, date_columns=[1, 2])
 
 
 def get_tutor_request_data(columns_to_use: Sequence[str]=(), as_unique: bool=False) \
@@ -38,6 +47,11 @@ def get_tutor_request_data(columns_to_use: Sequence[str]=(), as_unique: bool=Fal
 
     Notes
     -----
+    * Columns:
+        time_of_request, wait_time, course, quarter, week_in_quarter, day_in_week
+        with the first two as datetime-index and datetime.time respectively, and the rest as strings
+        eg: 2013-09-25 09:45:00, 01:21:25, Computer Science 1C 1W, Fall 2013, 1, 4
+
     * In the case that all columns are retrieved, as_unique has no difference on
       the result, since only distinct rows are allowed in the database table
     """
