@@ -11,8 +11,8 @@
       * For methods in a class, do not overly describe, the context of the class
         name that contains it should be enough, eg: prefer 'canvas.draw' over
         'canvas.draw_on_canvas'. another example (taken from this project):
-        'ParserDict.parse' over 'ParserDict.map_to_token' or
-        'ParserDict.parse_to_dict'. In the case of module names, this holds to,
+        'AliasTable.lookup_by_alias' over 'AliasTable.map_to_token' or
+        'AliasTable.parse_to_dict'. In the case of module names, this holds to,
         so prefer 'os_lib.get_basename' over 'os_lib.get_basename_of_path'.
         Of course this means no import * as well, favor importing module names
         for this reason as much as possible.

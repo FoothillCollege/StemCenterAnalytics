@@ -109,7 +109,7 @@ class _SCWrapper(object):
         def parse_datetime_(dt):
             return pd.to_datetime(prs.parse_date(dt))
 
-        date_objects = prs.parse_input(user_input=dates, mapping_func=parse_datetime_)
+        date_objects = prs.parse_user_input(user_input=dates, mapping_func=parse_datetime_)
         dates_ = [datetime.datetime.strftime(date, '%Y-%m-%d') for date in date_objects]
 
         if ' - ' in dates:
@@ -122,9 +122,9 @@ class _SCWrapper(object):
         return self
 
     def filter_by_year(self, years: Union[str, Sequence[str]]):
-        years_ = prs.parse_input(
+        years_ = prs.parse_user_input(
             user_input=years,
-            mapping_func=lambda yr: prs.TIME_UNIT_VALUES.YEARS.parse(string=str(yr)),
+            mapping_func=lambda yr: prs.TIME_UNIT_VALUES.YEARS.lookup_by_alias(alias=str(yr)),
             values_to_slice=prs.TIME_UNIT_VALUES.YEARS.keys()
         )
         # filter by year here...
@@ -134,7 +134,7 @@ class _SCWrapper(object):
     def filter_by_course(self, course_names: Union[str, Sequence[str]]):
         if ' - ' in course_names:
             raise prs.ParsingError('\'{}\' is invalid - course input cannot be dashed.')
-        course_names_ = prs.parse_input(
+        course_names_ = prs.parse_user_input(
             user_input=course_names,
             mapping_func=partial(prs.parse_course, as_tuple=True, check_records=True)
         )
@@ -153,7 +153,7 @@ class _SCWrapper(object):
 
         keys = (prs.TIME_UNIT_VALUES.QUARTERS_WITH_YEARS.keys() if with_years else
                 prs.TIME_UNIT_VALUES.QUARTERS.keys())
-        quarters_ = prs.parse_input(
+        quarters_ = prs.parse_user_input(
             user_input=quarters,
             mapping_func=prs.parse_quarter,
             values_to_slice=keys
@@ -162,18 +162,18 @@ class _SCWrapper(object):
         return self
 
     def filter_by_week_in_quarter(self, weeks: Sequence):
-        weeks_ = prs.parse_input(
+        weeks_ = prs.parse_user_input(
             user_input=weeks,
-            mapping_func=prs.TIME_UNIT_VALUES.WEEKS_IN_QUARTER.parse,
+            mapping_func=prs.TIME_UNIT_VALUES.WEEKS_IN_QUARTER.lookup_by_alias,
             values_to_slice=prs.TIME_UNIT_VALUES.WEEKS_IN_QUARTER.keys()
         )
         self.data = self.data[self.data['week_in_quarter'].isin(weeks_)]
         return self
 
     def filter_by_day(self, days: Union[str, int, Sequence[Union[str, int]]]):
-        days_ = prs.parse_input(
+        days_ = prs.parse_user_input(
             user_input=days,
-            mapping_func=prs.TIME_UNIT_VALUES.WEEKDAYS.parse,
+            mapping_func=prs.TIME_UNIT_VALUES.WEEKDAYS.lookup_by_alias,
             values_to_slice=prs.TIME_UNIT_VALUES.WEEKDAYS.keys()
         )
         self.data = self.data[self.data['day'].isin(days_)]
@@ -225,7 +225,7 @@ class _SCWrapper(object):
         """
         if not isinstance(time_range, str) or ' - ' not in time_range:
             raise prs.ParsingError('\'{}\' is invalid - only dashed input is allowed.'.format(time_range))
-        start_time, end_time = prs.parse_input(
+        start_time, end_time = prs.parse_user_input(
             user_input=time_range,
             mapping_func=prs.parse_time,
             values_to_slice=()
