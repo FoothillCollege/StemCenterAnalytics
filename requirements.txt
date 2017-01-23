@@ -1,3 +1,3 @@
-# for packages only available on pip, and not conda
-gunicorn
-tdqm     # progress bar library, only needed for scripts
+# pip only package requirements (libraries not available through conda)
+tqdm      # progress bar library, only needed for scripts
+gunicorn  # web server for the RESTFul web service located in app.py
