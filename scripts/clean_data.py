@@ -105,6 +105,10 @@ def build_new_tutor_request_row(old_row: NamedTuple) -> \
     if not quarter:
         return ()
     wait_time = _extract_elapsed_time(time_of_request, time_of_service)
+    course = input_validation.parse_course(old_row.course_name + ' ' + old_row.course_section)
+
+    week_in_quarter = _determine_week_in_quarter(time_of_request, quarter)
+    day_in_week = date.toordinal() % 7 + 1  # weekday: sun=1, sat=7
 
     return time_of_request, str(wait_time), course, quarter, week_in_quarter, day_in_week
 
@@ -136,6 +140,7 @@ def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
     with warehouse.connect_to_stem_center_db() as con:
         io_lib.write_to_sqlite_table(con, new_df, table_name='tutor_requests',
                                      if_table_exists=if_exists, data_types={'wait_time': str})
+
 
 if __name__ == '__main__':
     # todo: add validation checking for each column
