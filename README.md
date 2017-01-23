@@ -4,12 +4,18 @@ Foothill College's Stem Center Analytics system is now in Alpha!
 View the data-visualization dashboard portion of the project at:
 http://foothillcollege.github.io/StemCenterAnalytics/
 
-** Project Status
-The frontend's course selection bar is not yet functional, and the label's aren't dynamic yet.
+** Project Development Status
+Frontend:
+   * Course selection bar is not yet functional
+   * Labels are not complete
+   * Shift to highcharts.js not complete
+   * Other graphs not yet shown - including a graph similar to that of GitHub's user contributions heatmap
+Backend:
+   * The data pipeline is not fully automated - data is still historical, no hourly updates YET
+   * The backend RESTFul API does not yet support GENERALIZED interval/range/course calculation requests
+   * Backend analytics API is not complete
+   * However, all the pieces are there, it's just a matter of some further tweaking/generalizing code
 
-After the dashboard's current features are polished over the next month or two, the beta version, to be
-released this December, will have an additional graph similar to that of GitHub's user contributions heatmap.
-
-Around that same time, the rest of the project (API and data pipeline) will have matured to the point of
-moving the entire analytics system to hourly automated updates, and potentially real time (or close to it).
+PS: The project is NOT dead, simply on a break while contributors tend to other, more immediate
+issues, such as the ongoing spring 2017 semester.
 ****************************************************************************************************************
