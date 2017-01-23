@@ -1,12 +1,24 @@
-"""Provides input/data validation functionality.
+"""Provides input validation functionality specific to project needs.
 
-todo: explicitly define dashed, comma-delimited, and sequence of string inputs.
+Notable Contents
+----------------
+InvalidInputError : Class, Subclass of ValueError
+    Core exception intended to be used anywhere invalid input is encountered
+AliasTable : Class, Subclass of object
+    Lookup table for user-defined name mappings, with two lookup methods
+    `lookup_by_alias` and `lookup_by_ordering`
+AliasTable instances : AliasTable object
+    Global constant instances of `AliasTable`, ie `COLUMN_NAMES`
+Functions with names that start with 'parse'
+    Specific parsing functions with non-trivial implementation, ie `parse_course`
+parse_input : (string, function, optional Sequence) -> Sequence
+    Workhorse function for applying string mapping or parsing functions to
+    multiple types of user input. Its primary use case is for the aforementioned
+    lookup methods of `AliasTable` instances and 'parse____' functions.
 
 Notes
 -----
-* Token value start from zero, so make sure to add one to parsed value for
-  any client facing code.
-* Any function ing Tuple[str, str], indicates that the values to the left
+* Any function returning Tuple[str, str], indicates that the values to the left
   and right of the dash are parsed, as it doesn't make sense to return
   all the immediate values (eg `parse_datetimes`). Thus, such functions
   only parse ranges (dashed input) and nothing more.
@@ -14,78 +26,209 @@ Notes
 import re
 import types
 import datetime
-from collections import OrderedDict
+import collections
 from typing import Sequence, Union, Tuple, List, Set
 
+import numpy as np
 import pandas as pd
 
 from stem_center_analytics import warehouse
 
 
-class ParsingError(ValueError):
+class InvalidInputError(ValueError):
     """Base exception raised for value-related errors encountered while parsing a string."""
-    pass
+    def __init__(self, value: object, reason: str):
+        super().__init__('\'{}\' is invalid - {}'.format(value, reason))
 
 
-class ParserDict(OrderedDict):
+class AliasTable(object):
 
-    """Create a key that maps to a set of it's acceptable aliases.
+    """Lookup table for name and aliases.
+
+    Essentially a lookup table for user-defined name mappings.
+    The table is intended to be immutable, and thus rows can only be
+    created once, at instantiation.
+
+    Parameters
+    ----------
+    kwargs : keyword-arguments
+        Each parameter creates a corresponding row in the table according to:
+        * relative position of keyword-argument -> ordering (aka 1-based index)
+        * kwarg-key (string) -> name (aka official name)
+        * kwarg-value (set of strings) -> acceptable aliases (aka alternate names)
+
+    Attributes
+    ----------
+    names : tuple of strings
+        Sequence of names within the table
+
+    Methods
+    --------
+    lookup_by_ordering(ordering, raise_if_not_found=True) -> matched_name or None
+        Search collection for a name corresponding to given alias
+    lookup_by_alias(alias, raise_if_not_found=True) -> matched_name or None
+        Search collection for a name corresponding to given alias
+
+    Raises
+    ------
+    ValueError
+        If any given (key, value) positional argument of constructor is:
+        * Not a tuple of exactly two items
+        * Item to be taken as key is not a string
+        * Item to be taken as value is not a set of strings
+        * Not a tuple consisting of a string, and a set of string
+        * If any string, whether as a key or as a member of value
+          contains a character other than a letter, digit, space, or underscore
+
+    Notes
+    -----
+    * The values in the table are stored internally in an Ordered Dictionary
 
     Examples
     --------
-    will raise error: TokenMappings(('monday', ('mon', 'm')))
-    won't raise error: TokenMappings(('monday', {'mon', 'm'}))
+    >>> a0 = ('joseph', {'joseph', 'jose', 'joe', 'jo'})  # joseph referred by any of the left values
+    >>> a1 = ('sally', {'sally'})                         # sally referred to only by sally
+    >>> a2 = ('thomas', {'tom'})                          # thomas referred to only by tom
+    >>> a3 = ('zoe', {'zoe', 'zo'})                       # zoe referred to by zoe or zo
+    >>> ORDERED_NAMES = AliasTable(a0, a1, a2, a3)
+    >>> print(ORDERED_NAMES)
+    **************** Alias Table ****************
+    | ORDERING |  NAME  |        ALIASES        |
+    |    1     | joseph | jo, joe, jose, joseph |
+    |    2     | sally  |         sally         |
+    |    3     | thomas |          tom          |
+    |    4     |  zoe   |        zo, zoe        |
+    |___________________________________________|
+    >>> ORDERED_NAMES.lookup_by_alias('joseph', raise_if_not_found=False)
+    'joseph'
+    >>> ORDERED_NAMES.lookup_by_alias('jo', raise_if_not_found=False)
+    'joseph'
+    >>> ORDERED_NAMES.lookup_by_ordering('1', raise_if_not_found=False)
+    'joseph'
+    >>> ORDERED_NAMES.lookup_by_ordering(2, raise_if_not_found=False)
+    'sally'
+    >>> ORDERED_NAMES.lookup_by_ordering('joseph', raise_if_not_found=False)
+
     """
 
     def __init__(self, *args: Tuple[str, Set[str]]):
-        """Creates mappings (1st item in pair str, 2nd item must support membership testing)."""
-        # in case you think the below is performance bloat, %timeit reveals a mere 5 nanosecond
-        # difference (~52 vs ~47 without the validation code) == that's 5 billionths of a second!
+        """Initialize collection with any number of string, set of string pairs."""
+        # todo: switch to keyword args upon updating to python 3.6
         for pair in args:
-            message = 'Cannot construct {} object - '.format(self.__class__.__name__)
-            if len(pair) != 2 or not isinstance(pair[1], set):
-                raise ValueError(message + 'ParserDict arguments must be of form Tuple[str, set].')
-            if not isinstance(pair[0], str):
-                raise ValueError(message + 'keys can contain only contain '
-                                           'letters, digits, spaces, and underscores.')
-            if (not isinstance(pair[0], str) or not
-                    pair[0].replace('_', '').replace(' ', '').isalnum()):
-                raise ValueError(message + 'keys can contain only contain '
-                                           'letters, digits, spaces, and underscores.')
-            if any((not isinstance(s, str) or not s.replace('_', '').replace(' ', '').isalnum())
-                   for s in pair[1]):
-                raise ValueError(message + 'ParserDict strings in each set can only contain '
-                                           'letters, digits, spaces, and underscores.')
-        super().__init__(args)
+            if (len(pair) != 2 or not isinstance(pair, tuple) or not
+                    isinstance(pair[0], str) or not isinstance(pair[1], set)):
+                raise ValueError('Cannot construct AliasTable object - '
+                                 'ALL arguments must be a two-item tuple '
+                                 'consisting of a string and set of strings.')
+            if any(not isinstance(entry, str) or not entry.replace('_', '').replace(' ', '').isalnum()
+                   for entry in {pair[0]} | pair[1]):
+                raise ValueError('Cannot construct AliasTable object - '
+                                 'ALL strings in the collection can only contain '
+                                 'letters, digits, spaces, and underscores.')
+        self._ordered_mapping = collections.OrderedDict(args)
+        self.names = tuple(self._ordered_mapping.keys())
 
-    def parse(self, string: str, raise_if_not_found: bool=True) -> str:
-        """Map string to token, raising if not found (or return '')."""
-        tokens = self.keys()
-        for token in tokens:  # check each parser set for membership
-            if string in self.__getitem__(token):
+    def __str__(self):
+        """Return table with each row containing ordering, name, and aliases."""
+        # build 2D sequence of strings, with aliases separated by commas in increasing length order
+        rows = [('ORDERING', 'NAME', 'ALIASES')]
+        for ordering, name in enumerate(self.names):
+            aliases = sorted(self._ordered_mapping[name], key=lambda item: (len(item), item))
+            description = ', '.join(aliases) if aliases else '--'
+            rows.append((ordering + 1, name, description))
+        # compute desired column width by finding length of widest cell in each column
+        grid = [[str(col).strip(' ') for col in row] for row in rows]
+        cell_widths = [max([len(v) for v in col]) for col in np.array(grid).T]
+        table_width = 3 * len(grid[0]) + sum(cell_widths) + 1
+
+        def build_row(row):
+            return '|'.join([' ' + cell.center(width) + ' '
+                             for cell, width in zip(row, cell_widths)])
+
+        return (str.center(' Alias Table ', table_width, '*') + '\n' +
+                '\n'.join(['|' + build_row(row) + '|' for row in grid]) +
+                '\n|' + ((table_width - 2) * '_') + '|')
+
+    def lookup_by_ordering(self, ordering: Union[int, str],
+                           raise_if_not_found: bool=True) -> Union[None, str]:
+        """Lookup name in table according to its relative ordering.
+
+        Parameters
+        ----------
+        ordering : integer or string
+            Relative ordering corresponding to a name in the table.
+        raise_if_not_found : boolean, default True
+            Determines whether to raise an `InvalidInputError` in the
+            case of an invalid row number or to return None instead
+
+        Returns
+        -------
+        None or string
+
+        Raises
+        ------
+        `InvalidInputError`
+
+        See Also
+        --------
+        * Documentation's 'Examples' section of containing class `AliasTable`
+        """
+        try:
+            ordering = int(ordering) - 1  # convert from 1 based to 0 based indexing
+            return self.names[ordering]
+        except (TypeError, ValueError, IndexError):
+            if not raise_if_not_found:
+                return None
+            raise InvalidInputError(ordering, 'ordering must fall between 1 and '.format(len(self.names)))
+
+    def lookup_by_alias(self, alias: str, raise_if_not_found: bool=True) -> Union[None, str]:
+        """Lookup name in table according to its alias.
+
+        Parameters
+        ----------
+        alias : string
+            Alias corresponding to a name in the table
+            Relative ordering as an integer value between one and
+            the number of entries in the table
+        raise_if_not_found : boolean, default True
+            Determines whether to raise an `InvalidInputError` in the
+            case of an invalid alias or to return None instead
+
+        Returns
+        -------
+        None or string
+
+        Raises
+        ------
+        `InvalidInputError`
+
+        See Also
+        --------
+        * Documentation's 'Examples' section of containing class `AliasTable`
+        """
+        for token in self._ordered_mapping.keys():
+            if alias in self._ordered_mapping[token]:
                 return token
 
         if not raise_if_not_found:
-            return ''
-        tokens_ = tuple(tokens)
-        tokens_ = (tokens_[:2] + ('...',) + tokens_[-2:]) if len(tokens) > 4 else tokens_
-        raise ParsingError('\'{}\' cannot be recognized as one of the following - {}'
-                           .format(string, tokens_))
+            return None
+        valid_names = (self.names[:2] + ('...',) + self.names[-2:]) if len(self.names) > 4 else self.names
+        raise InvalidInputError(alias, 'cannot be recognized as one of '.format(valid_names))
 
 
-COL_NAMES = ParserDict(
+#region Name Mapping Definitions for column, other unit, and time unit label names
+COLUMN_NAMES = AliasTable(
     ('date',            {'date', 'date_of_request'}),
     ('time_of_request', {'time_of_request', 'time of request', 'start_time', 'start'}),
-    ('time_of_service', {'time_of_service', 'time of service', 'end_time', 'end'}),
     ('wait_time',       {'wait_time', 'wait time', 'waittime'}),
     ('course_name',     {'course_name', 'course name'}),
     ('course_section',  {'course_section', 'course section', 'section', 'sec'})
 )
-METRIC_LABEL_NAMES = ParserDict(
+OTHER_UNIT_NAMES = AliasTable(
     ('wait_time', {'wait_time', 'wait time', 'waittime'}),
     ('demand',    {'demand'})
 )
-TIME_UNIT_LABEL_NAMES = ParserDict(
+TIME_UNIT_NAMES = AliasTable(
     ('hour',            {'hour', 'hours', 'hourly', 'hr', 'hrs'}),
     ('day_in_week',     {'day_in_week', 'day in week', 'day in wk', 'days in week',
                          'days in wk', 'day', 'days', 'daily', 'weekday', 'weekdays',
@@ -96,62 +239,66 @@ TIME_UNIT_LABEL_NAMES = ParserDict(
     ('quarter',         {'quarter', 'quarters', 'quarterly', 'qtr', 'qtrs'}),
     ('year',            {'year', 'years', 'yearly', 'yr', 'yrs'})
 )
+# endregion
+
+# region Name Mapping Definitions for column, other unit, and time unit value
 TIME_UNIT_VALUES = types.SimpleNamespace(
     # generate args i.e.: [('0', {'0'}), ..., ('23', {'23'})]
-    HOURS=ParserDict(
+    HOURS=AliasTable(
         *[(str(hr), {str(hr)}) for hr in range(0, 24)]
     ),
-    WEEKDAYS=ParserDict(
-        ('Monday',    {'1', 'm', 'mo', 'mon', 'monday'}),
-        ('Tuesday',   {'2', 't', 'tu', 'tue', 'tues', 'tuesday'}),
-        ('Wednesday', {'3', 'w', 'we', 'wed', 'wednesday'}),
-        ('Thursday',  {'4', 'r', 'th', 'thu', 'thur', 'thurs', 'thursday'}),
-        ('Friday',    {'5', 'f', 'fr', 'fri', 'friday'}),
-        ('Saturday',  {'6', 's', 'sa', 'sat', 'saturday'}),
-        ('Sunday',    {'7', 'u', 'su', 'sun', 'sunday'})
+    WEEKDAYS=AliasTable(
+        ('Monday',    {'m', 'mo', 'mon'}),
+        ('Tuesday',   {'t', 'tu', 'tue', 'tues'}),
+        ('Wednesday', {'w', 'we', 'wed'}),
+        ('Thursday',  {'r', 'th', 'thu', 'thur', 'thurs'}),
+        ('Friday',    {'f', 'fr', 'fri'}),
+        ('Saturday',  {'s', 'sa', 'sat'}),
+        ('Sunday',    {'u', 'su', 'sun'})
     ),
-    WEEKS_IN_SUMMER_QUARTER=ParserDict(
+    WEEKS_IN_SUMMER_QUARTER=AliasTable(
         *[(str(wk), {str(wk)}) for wk in range(1, 7)]
     ),
     # generate args i.e.: [('1', {'1'}), ..., ('12', {'12'})]
-    WEEKS_IN_QUARTER=ParserDict(
+    WEEKS_IN_QUARTER=AliasTable(
         *[(str(wk), {str(wk)}) for wk in range(1, 13)]
     ),
-    MONTHS=ParserDict(
-        ('January',   {'1', 'jan', 'january'}),
-        ('February',  {'2', 'feb', 'february'}),
-        ('March',     {'3', 'mar', 'march'}),
-        ('April',     {'4', 'apr', 'april'}),
-        ('May',       {'5', 'may'}),
-        ('June',      {'6', 'jun', 'june'}),
-        ('July',      {'7', 'jul', 'july'}),
-        ('August',    {'8', 'aug', 'august'}),
-        ('September', {'9', 'sep', 'september'}),
-        ('October',   {'10', 'oct', 'october'}),
-        ('November',  {'11', 'nov', 'november'}),
-        ('December',  {'12', 'dec', 'december'}),
+    MONTHS=AliasTable(
+        ('January',   {'jan', 'january'}),
+        ('February',  {'feb', 'february'}),
+        ('March',     {'mar', 'march'}),
+        ('April',     {'apr', 'april'}),
+        ('May',       {'may'}),
+        ('June',      {'jun', 'june'}),
+        ('July',      {'jul', 'july'}),
+        ('August',    {'aug', 'august'}),
+        ('September', {'sep', 'september'}),
+        ('October',   {'oct', 'october'}),
+        ('November',  {'nov', 'november'}),
+        ('December',  {'dec', 'december'}),
     ),
-    QUARTERS=ParserDict(
-        ('Fall',   {'1', 'f', 'fa', 'fall'}),
-        ('Winter', {'2', 'w', 'wi', 'win', 'winter'}),
-        ('Spring', {'3', 's', 'sp', 'spr', 'spring'}),
-        ('Summer', {'4', 'u', 'su', 'sum', 'summer'})
+    QUARTERS=AliasTable(
+        ('Fall',   {'f', 'fa', 'fall'}),
+        ('Winter', {'w', 'wi', 'win', 'winter'}),
+        ('Spring', {'s', 'sp', 'spr', 'spring'}),
+        ('Summer', {'u', 'su', 'sum', 'summer'})
     ),
     # generate args i.e.: [('2000', {'2000', '00'}), ..., ('2099', {'99', '2099'})]
-    YEARS=ParserDict(
+    YEARS=AliasTable(
         *[(str(yr), {str(yr), str(yr)[-2:]}) for yr in range(2000, 2100)]
     ),
     # generate current format (as stored in db) possibilities, i.e.: 'F 2013', 'W 2014', ...
-    QUARTERS_WITH_YEARS=ParserDict(
+    QUARTERS_WITH_YEARS=AliasTable(
         *[((qtr_name + ' ' + str(qtr_yr)), {qtr_name + ' ' + str(qtr_yr)})
           for qtr_yr in range(2000, 2100)
           for qtr_name in ('Winter', 'Spring', 'Summer', 'Fall')]
     )
 )
+# endregion
 
+# region Name Mapping Definitions for course subjects
 # official course subject names were referenced
-#SET_OF_ALL_COURSES = warehouse.get_set_of_all_courses()
-CORE_SUBJECTS = ParserDict(
+CORE_SUBJECTS = AliasTable(
     ('Mathematics',      {'mat', 'math', 'mathematics'}),
     ('Physics',          {'phy', 'phys', 'physics'}),
     ('Biology',          {'bio', 'biol', 'biology'}),
@@ -159,7 +306,7 @@ CORE_SUBJECTS = ParserDict(
     ('Engineering',      {'eng', 'engr', 'engi', 'engineering'}),
     ('Computer Science', {'cs', 'com', 'c s', 'comp', 'comp sci', 'computer science'})
 )
-OTHER_SUBJECTS = ParserDict(
+OTHER_SUBJECTS = AliasTable(
     ('Accounting',              {'acc', 'actg', 'accounting'}),
     ('Astronomy',               {'ast', 'astr', 'astro', 'astronomy'}),
     ('Anthropology',            {'ant', 'anth', 'anthro', 'anthropology'}),
@@ -170,22 +317,24 @@ OTHER_SUBJECTS = ParserDict(
     ('English',                 {'engl', 'english'}),
     ('History',                 {'history', 'hist'})
 )
-ALL_SUBJECTS = ParserDict(
-    *(list(CORE_SUBJECTS.items()) + list(OTHER_SUBJECTS.items()))
+ALL_SUBJECTS = AliasTable(
+    *(list(CORE_SUBJECTS._ordered_mapping.items()) + list(OTHER_SUBJECTS._ordered_mapping.items()))
 )
+# endregion
 
 
-def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(str),
-                values_to_slice: Sequence[Union[str, object]] = ()) \
+def parse_user_input(user_input: Union[str, Sequence[str]], mapping_func: callable(str),
+                     values_to_slice: Sequence[Union[str, object]]=()) \
         -> Union[List[Union[str, object]], Tuple[str, str], Tuple[object, object]]:
     """Maps each token of a dashed, comma-delimited, or sequence of strings.
 
     Parameters
     ----------
-    user_input : str or array-like of str
-        * sequence of strings - array-like of strings
-        * dashed string - string containing dash
-        * delimited string - string containing values separated by commas,
+    user_input : string or array-like of string
+        Three distinct types of user input are recognized
+        * sequence of strings -> array-like of strings
+        * dashed string -> string containing dash
+        * delimited string -> string containing values separated by commas,
           or no comma at all
     mapping_func : one str arg function
         The function in which each string element extracted from `user_input`
@@ -196,9 +345,9 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
 
     Returns
     -------
-    array-like of str or object:
-        * If array-like return as list of map values
-        * If string containing dash, map left and right values:
+    array-like of strings or object:
+        * If array-like return as list of lookup_by_alias values
+        * If string containing dash, lookup_by_alias left and right values:
         * If `values_to_slice` is empty, then left and right
         * If `values_to_slice` is not empty, then list sliced by left and right
           values, inclusive
@@ -207,7 +356,7 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
 
     Raises
     ------
-    ParsingError
+    ValueError
         * If not a string or sequence of strings
         * If input contains a single dash without surrounding spaces
         * If input cannot be parsed as either a sequence or delimited string,
@@ -218,20 +367,20 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
 
     Examples
     --------
-    >>> parse_input('foo, bar, baz', str.capitalize)
+    >>> parse_user_input('foo, bar, baz', str.capitalize)
     ['Foo', 'Bar', 'Baz']
-    >>> parse_input('fOo,  bar, BAz', str.capitalize)
+    >>> parse_user_input('fOo,  bar, BAz', str.capitalize)
     ['Foo', 'Bar', 'Baz']
-    >>> parse_input('foo - baz', str.capitalize, ['Foo', 'Bar', 'Baz'])
+    >>> parse_user_input('foo - baz', str.capitalize, ['Foo', 'Bar', 'Baz'])
     ['Foo', 'Bar', 'Baz']
-    >>> parse_input('Foo', str.capitalize, ['Foo', 'Bar', 'Baz'])
+    >>> parse_user_input('Foo', str.capitalize, ['Foo', 'Bar', 'Baz'])
     ['Foo']
     """
     if isinstance(user_input, Sequence) and not isinstance(user_input, str):
         return [mapping_func(' '.join(s.split())) for s in user_input]
     if not isinstance(user_input, str):
-        raise ParsingError('Only a collection of strings (list/tuple/etc) OR a '
-                           'single (eg: delimited/dashed string) can be parsed.')
+        raise ValueError('Only a collection of strings (list/tuple/etc) OR a '
+                         'single (eg: delimited/dashed string) can be parsed.')
 
     user_input_ = ' '.join(user_input.split())
     if ' - ' not in user_input:
@@ -250,24 +399,33 @@ def parse_input(user_input: Union[str, Sequence[str]], mapping_func: callable(st
     left_index, right_index = values.index(left_value), values.index(right_value)
     if left_index < right_index:
         return values[left_index: right_index + 1]
-    raise ParsingError('\'{}\' is invalid: dashed string must be of the form '
-                       '\'LHS - RHS\' where LHS < RHS.'.format(user_input))
+    raise ValueError('Dashed strings must be of the form \'LHS - RHS\' where LHS < RHS.')
 
 
-def parse_date(dt: str, as_date_object: bool=False) -> Union[str, datetime.date]:
-    """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
+def parse_date(date: str, as_date_object: bool=False) -> Union[str, datetime.date]:
+    """Parse string representing a date.
+
+    Parameters
+    ----------
+    date : string
+        String representing a date. Formatting options are flexible enough
+        to cover all the most common data representations (see examples)
+    as_date_object : boolean, False
+        Determines whether to return a `datetime.date` object
+        or a string of the form 'YY-MM-DD'
 
     Returns
     -------
-    datetime.datetime object, if `as_date_object`=True
-        * If `include_time`=True return parsed result as pandas.datetime object
-    str, if `as_date_object`=False
-        * If `include_time`=True return string with the format of
-          '%Y-%m-%d %H:%M:%S' with H:M:S zero by default
+    string or `datetime.date`
+
+    Raises
+    ------
+    `InvalidInputError`
 
     See Also
     --------
-    * `input_validation.parse_time`
+    * `core.input_validation.parse_time`
+    * `core.input_validation.parse_datetime`
     * `pandas.to_datetime`
 
     Examples
@@ -287,43 +445,42 @@ def parse_date(dt: str, as_date_object: bool=False) -> Union[str, datetime.date]
     >>> parse_date('2015-2-2', as_date_object=True)
     datetime.date(2015, 2, 2)
     """
-    date, _, time = dt.partition(' ')
+    date, _, time = date.partition(' ')
     if time.replace(' ', '') != '':
-        raise ParsingError('\'{}\' is invalid - only date-like strings can be parsed.'.format(dt))
+        raise InvalidInputError(date, 'only date-like strings can be parsed.')
 
     try:
         dt_ = pd.to_datetime(date, infer_datetime_format=True).date()
         return dt_ if as_date_object else dt_.strftime('%Y-%m-%d')
     except Exception:
-        raise ParsingError('\'{}\' is invalid - cannot be recognized as a date.'.format(date))
+        raise InvalidInputError(date, 'cannot be recognized as a date.')
 
 
 def parse_time(time: str, as_time_object: bool=False) -> Union[str, datetime.time]:
-    """Parse string representing time of day to a format 'HH:MM:SS'.
+    """Parse string representing a time of day.
 
     Parameters
     ----------
     time : string
         Represents time of day in format 'hour[:minutes[:seconds][am/pm]'.
         Hour is required, 24 hour format assumed, unless time ends with am/pm.
-        Minutes (prefixed by colon) is optional, assumed to be 0 if not given.
+        Minutes and seconds are optional, assumed to be 0 if not given
     as_time_object : bool, default False
-        Determine if value to return is string or datetime object
+        Determines whether to return a `datetime.time` object
+        or a string of the form 'HH:MM:SS'
 
     Returns
     -------
-    * If `as_time_object` is True : datetime.time object
-        datetime.time object
-    * If `as_time_object` is False : string
-        Parsed time of day in format 'HH:MM:SS'
+    string or `datetime.time`
 
     Raises
     ------
-    ParsingError if none of the above `time` conditions are met.
+    `InvalidInputError`
 
     See Also
     --------
-    * `input_validation.parse_date`
+    * `core.input_validation.parse_date`
+    * `core.input_validation.parse_datetime`
     * `pandas.to_datetime`
 
     Examples
@@ -361,25 +518,33 @@ def parse_time(time: str, as_time_object: bool=False) -> Union[str, datetime.tim
         ).time()
         return time_object if as_time_object else str(time_object)
     except ValueError:
-        raise ParsingError('\'{}\' is invalid - cannot be recognized as a time.'.format(time))
+        raise InvalidInputError(time, 'cannot be recognized as a time.')
 
 
 def parse_datetime(dt: str, as_timestamp_object: bool=False) -> Union[str, pd.Timestamp]:
-    """Parse string containing datetime of format 'YY-MM-DD [HH:MM:SS]'.
+    """Parse string representing a datetime.
+
+    Parameters
+    ----------
+    dt : string
+        String representation of a datetime. If not all time units are given,
+        then any missing hours, minutes, or seconds are inferred as 0
+    as_timestamp_object : boolean, default False
+        Determines whether to return a `pandas.Timestamp` object
+        or a string of the form 'YY-MM-DD HH:MM:SS'
 
     Returns
     -------
-    datetime.datetime object
-        * If `as_datetime_object`=True
-    str
-        * If `as_datetime_object`=False
-            * If time given, string of format '%Y-%m-%d %H:%M:%S'
-            * If time not given, string of format '%Y-%m-%d 00:00:00'
+    string or `pandas.Timestamp`
+
+    Raises
+    ------
+    `InvalidInputError`
 
     See Also
     --------
-    * `input_validation.parse_time`
-    * `input_validation.parse_date`
+    * `core.input_validation.parse_time`
+    * `core.input_validation.parse_date`
     * `pandas.to_datetime`
 
     Examples
@@ -406,12 +571,30 @@ def parse_datetime(dt: str, as_timestamp_object: bool=False) -> Union[str, pd.Ti
         dt_ = pd.Timestamp.combine(date_, time_)
         return dt_ if as_timestamp_object else dt_.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        raise ParsingError('\'{}\' is invalid - must consist of a valid date '
-                           'followed by an optional valid time.'.format(dt))
+        raise InvalidInputError(dt, 'must consist of a valid date followed by an optional valid time.')
 
 
 def parse_quarter(quarter: str, with_year: bool=True) -> str:
-    """Parse quarter input to a list of full quarter names (eg: Fall 2013).
+    """Parse string representing an academic quarter.
+
+    Parameters
+    ----------
+    quarter : string
+        String representing an academic quarter.
+        Any given quarter's name always starts with an academic term
+        corresponding to one of Fall, Winter, Spring, or Summer.
+    with_year : boolean, default True
+        Determines whether or not to expect a year following the academic term.
+        In other words, if True then a quarter must contain a term AND year,
+        otherwise only a term is acceptable.
+
+    Returns
+    -------
+    string
+
+    Raises
+    ------
+    `InvalidInputError`
 
     Examples
     --------
@@ -425,40 +608,39 @@ def parse_quarter(quarter: str, with_year: bool=True) -> str:
     'Spring 2012'
     """
     quarter_name, _, quarter_year = quarter.lower().partition(' ')
-    map_term, map_year = TIME_UNIT_VALUES.QUARTERS.parse, TIME_UNIT_VALUES.YEARS.parse
+    map_term, map_year = TIME_UNIT_VALUES.QUARTERS.lookup_by_alias, TIME_UNIT_VALUES.YEARS.lookup_by_alias
     try:
         return (map_term(quarter_name) + ' ' + map_year(quarter_year) if with_year else
                 map_term(quarter_name))
-    except ParsingError:
-        message = ('\'{}\' is invalid - quarter name must correspond to on of {}'
-                   .format(quarter, tuple(TIME_UNIT_VALUES.QUARTERS.keys())))
+    except InvalidInputError:
+        message = ('quarter name must correspond to on of {}'.format(TIME_UNIT_VALUES.QUARTERS.names))
         message += ' followed by a 2 or 4 digit year in current century.' if with_year else '.'
-        raise ParsingError(message) from None
+        raise InvalidInputError(quarter, message) from None
 
 
 def parse_course(course_name: str, check_records: bool=False) -> str:
-    """Parse course input to cleaned components or full course name.
+    """Parse string representing a Foothill College course.
 
     Parameters
     ----------
-    course_name : str
+    course_name : string
         course name consisting of up to three components:
         * subject, required: type of course subject (eg math)
         * number, optional: course code (eg 1A)
         * section, optional: course section number (eg 01)
     check_records : bool, default False
-        Determines whether each parsed course should be checked in the course records
+        Determines whether the parsed course exists in any request
+        within the STEM Center's historical `tutor_request_data`.
+        If True then errors are raised in the case of a course not on record,
+        otherwise no errors can be raised as the given course is only cleaned
 
     Returns
     -------
-    str
-        Parsed course name with the same components of the original input
+    string
 
     Raises
     ------
-    ParsingError
-        * If the fully parsed course is not on record, according to the most
-          recent tutor request data
+    `InvalidInputError`
 
     Notes
     -----
@@ -511,29 +693,28 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
     number = re.sub('^0{,2}|(\.)?$', '', number)     # remove up to 3 leading 0s and 1 trailing '.'
     section = re.sub('^0|o', '', section)            # remove leading occurrence of o or 0
     if not check_records:
-        subject_ = ALL_SUBJECTS.parse(subject)       # let it raise
+        subject_ = ALL_SUBJECTS.lookup_by_alias(subject)       # let it raise
         return ' '.join([subject_, number, section]).strip(' ')
 
     # --------- otherwise, check records, and if not available report the reason for missing
     try:
-        subject = ALL_SUBJECTS.parse(subject)
+        subject = ALL_SUBJECTS.lookup_by_alias(subject)
         if subject not in set_of_all_courses:
-            raise ParsingError
-    except ParsingError:
-        raise ParsingError('Subject \'{}\' is not on record.'.format(subject)) from None
+            raise InvalidInputError
+    except InvalidInputError:
+        raise InvalidInputError(course_name_, 'subject \'{}\' is not on record.'.format(subject)) from None
 
     full_course_name = ' '.join([subject, number, section]).strip(' ')
     if full_course_name in set_of_all_courses:
         return full_course_name
 
-    # full course name not record: check if it was due to unavailable course section/number
+    # full course name not record: check if it's due to unavailable course section/number
     course_name_without_section = ' '.join([subject, number]).strip(' ')
     if course_name_without_section in set_of_all_courses:
-        raise ParsingError('Course \'{}\' has no section \'{}\' on record.'
-                           .format(course_name_without_section, section))
+        raise InvalidInputError(course_name_, 'course \'{}\' has no section \'{}\' on record.'
+                                .format(course_name_without_section, section))
     if subject in set_of_all_courses:
-        raise ParsingError('Subject \'{}\' has no course number \'{}\' on record.'
-                           .format(subject, number))
-    raise ParsingError('\'{}\' cannot be recognized - course name requires a recognizable'
-                       'subject, followed by either an existing course\'s number OR its'
-                       'number and section.'.format(course_name_))
+        raise InvalidInputError(course_name_, 'subject \'{}\' has no course number \'{}\' on record.'
+                                .format(subject, number))
+    raise InvalidInputError(course_name_, 'course name requires a recognizable subject, followed'
+                            'by either an existing course\'s number OR its number and section.')
