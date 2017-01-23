@@ -9,6 +9,7 @@ http://foothillcollege.github.io/StemCenterAnalytics/
    * Labels are not complete
    * Shift to highcharts.js not complete
    * Other graphs not yet shown - including a graph similar to that of GitHub's user contributions heatmap
+
 ** Backend Development Status:
    * The data pipeline is not fully automated - data is still historical, no hourly updates YET
    * The backend RESTFul API does not yet support GENERALIZED interval/range/course calculation requests
