@@ -9,6 +9,7 @@ Notes
 """
 from typing import NamedTuple, Union, Tuple
 
+import tqdm
 import numpy as np
 import pandas as pd
 
@@ -113,7 +114,7 @@ def build_new_tutor_request_row(old_row: NamedTuple) -> \
     return time_of_request, str(wait_time), course, quarter, week_in_quarter, day_in_week
 
 
-def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
+def process_tutor_request_data(if_exists: str, replace_db: bool=False, show_progress_bar: bool=True) -> None:
     """Clean data and add to database, if_exists: {'replace', 'append', 'fail'}.
 
     Note that any row with dates falling outside the range of quarters
@@ -124,9 +125,10 @@ def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
     old_df = io_lib.read_csv_file(
         os_lib.join_path(PROJECT_DIR, 'external_datasets', 'unclean_tutor_requests.csv')
     )
-
     new_rows = []
-    for row in old_df.itertuples():
+    # todo: change tqdm progress bar to show seconds rather than 'it' unit, and display bar
+    row_iter = tqdm.tqdm(old_df.itertuples()) if show_progress_bar else old_df.itertuples()
+    for row in row_iter:
         new_row = build_new_tutor_request_row(row)
         if new_row:
             new_rows.append(new_row)
@@ -139,7 +141,7 @@ def process_tutor_request_data(if_exists: str, replace_db: bool=False) -> None:
         io_lib.create_sqlite_file(warehouse.DATA_FILE_PATHS.DATABASE, replace_if_exists=True)
     with warehouse.connect_to_stem_center_db() as con:
         io_lib.write_to_sqlite_table(con, new_df, table_name='tutor_requests',
-                                     if_table_exists=if_exists, data_types={'wait_time': str})
+                                     if_table_exists=if_exists, data_types={'wait_time': np.str})
 
 
 if __name__ == '__main__':
