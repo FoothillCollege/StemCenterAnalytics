@@ -679,7 +679,6 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
     >>> parse_course('Comp Sci 1B')
     'Computer Science 1B'
     """
-    set_of_all_courses = warehouse.get_set_of_all_courses()
     course_name_ = ' '.join(course_name.split()).lower()
     first_digit_position = next((k for k, char in enumerate(course_name_) if char.isdigit()), -1)
     if first_digit_position == -1:  # assume subject if input has no digits
@@ -697,6 +696,7 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
         return ' '.join([subject_, number, section]).strip(' ')
 
     # --------- otherwise, check records, and if not available report the reason for missing
+    set_of_all_courses = warehouse.get_set_of_all_courses()
     try:
         subject = ALL_SUBJECTS.lookup_by_alias(subject)
         if subject not in set_of_all_courses:
