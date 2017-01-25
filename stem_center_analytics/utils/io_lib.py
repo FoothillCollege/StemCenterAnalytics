@@ -339,10 +339,21 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
         For example, datetime.time with a string representation of 'HH:MM:SS'
         is written in the format 'HH:MM:SS.000000' when no data type is given
 
+    Raises
+    ------
+    ValueError
+        * If `table_name` contains characters other than letters, digits,
+          spaces, dashes, underscores
+        * If `if_table_exists` not one of {'fail', 'replace', 'append'}
+        * If `data_types` contains non-existent column names or
+          unrecognizable data types
+    IOError
+        * If DataFrame failed to be imported due to an internal error
+          in `pandas.DataFrame.to_sql`
+
     Notes
     -----
-    * Assuming valid table name and `if_table_exists` options, no errors
-      are raised during writing. Instead, a message is logged to describing:
+    * Assuming no errors occur during writing, message is logged to describing:
           * action taken: replaced, appended, failed, or created
           * total number of row changes during the transaction
 
@@ -352,43 +363,51 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
       here for the raw IO, `pandas.DataFrame.to_sql` on their for
       more details on errors and limitations.
     """
-    # fixme: datatypes with str and fractional timestamp doesn't always resolve correctly
     normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
     if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
-        raise ValueError('Given table name \'{}\' is invalid - only letters, digits, spaces, '
-                         'dashes, and underscores are allowed.'.format(table_name))
+        raise ValueError('Given table name \'{}\' contains illegal characters - '
+                         '\n    only letters, digits, spaces, dashes, and underscores are allowed.'
+                         .format(table_name))
 
     table_is_in_db = is_table_in_database(con, table_name)
     actions = ('fail', 'append', 'replace')
     if if_table_exists not in actions:
         raise ValueError('`action_if_exists` must be in {\'fail\', \'replace\', \'append\'}.')
-    if if_table_exists == 'append':
-        ensure_table_is_in_database(con, 'tutor_requests')
 
+    for column_name in data_types.keys():
+        try:
+            if column_name == data.index.name:
+                data.index = data.index.astype(data_types[column_name])
+            else:
+                data[column_name] = data[column_name].astype(data_types[column_name])
+        except Exception:
+            raise ValueError('`data_types` entries must map existing column to a recognizable data-type.')
+
+    database_path = get_database_paths(con)[0]
+    full_table_name = os_lib.get_basename(database_path, include_extension=False) + '.' + table_name
     try:
-        data.to_sql(name=table_name, con=con, if_exists=if_table_exists, dtype=data_types)
+        data.to_sql(name=table_name, con=con, if_exists=if_table_exists)
     except Exception as e:
-        if isinstance(e, ValueError):  # catch if_table_exists='fail' exception
+        # usually this is too fragile, but no other way to catch if_table_exists='fail' exception
+        if str(e) == 'ValueError: Table \'{}\' already exists.'.format(table_name):
             pass
         else:
-            raise IOError('DataFrame failed to be imported as table \'{}\' in the database '
-                          'present at \'{}\'.'.format(table_name, con))
+            raise IOError('DataFrame cannot be imported to table \'{}\' due to an internal error '
+                          'during database transaction'.format(full_table_name))
 
     # generate a report for the database update
     deciding_factors = (if_table_exists, table_is_in_db)
     outcomes = {
-        ('fail', True): 'Table \'{}\' cannot be created',
-        ('fail', False): 'Table \'{}\' successfully created',
-        ('append', True): 'Table \'{}\' successfully appended to',
-        ('append', False): 'Cannot append to non-existent table \'{}\' - append failed',
-        ('replace', True): 'Table \'{}\' successfully replaced',
-        ('replace', False): 'Cannot replace non-existent table \'{}\' - created instead'
+        ('fail', True): 'cannot be created',
+        ('fail', False): 'successfully created',
+        ('append', True): 'successfully appended to',
+        ('append', False): 'cannot be appended to as it does not exist',
+        ('replace', True): 'successfully replaced',
+        ('replace', False): 'successfully created'
     }
-    outcome = outcomes[deciding_factors].format(table_name)
-    outcome += ' (`if_table_exists`=\'{}\').'.format(if_table_exists)
-    print('\nLatest changes to db @ {}...'
-          '\n   {} ({:,} row changes).'
-          .format(con, outcome, con.total_changes))
+    print('Write transaction with `if_table_exists` set to \'{}\':'
+          '\n    Table \'{}\' {} with {:,} rows changed.'
+          .format(if_table_exists, full_table_name, outcomes[deciding_factors], con.total_changes))
 
 
 def connect_to_sqlite_database(file_path: str) -> sqlite3.Connection:
@@ -447,6 +466,22 @@ def get_all_columns_in_table(con: sqlite3.Connection, table_name: str) -> List[s
     ensure_table_is_in_database(con, table_name)
     cursor = con.execute('SELECT * FROM ' + table_name)
     return [col[0] for col in cursor.description]
+
+
+def get_database_paths(con: sqlite3.Connection) -> List[str]:
+    """Return absolute filepath to database from sqlite3 connection object.
+
+    Notes
+    -----
+    * From "PRAGMA database_list" command in the sqlite pragma docs,
+      The third column is the name of the database file.
+    * A returned 'path' may be empty, in which case the database was not
+      associated with the file.
+    """
+    cursor = con.cursor()
+    cursor.execute("PRAGMA database_list")
+    meta_rows = cursor.fetchall()
+    return [os_lib.normalize_path(row[2]) for row in meta_rows]
 
 
 def is_table_in_database(con: sqlite3.Connection, table_name: str) -> bool:
