@@ -125,8 +125,9 @@ def process_tutor_request_data(if_exists: str, replace_db: bool=False, show_prog
     old_df = io_lib.read_csv_file(
         os_lib.join_path(PROJECT_DIR, 'external_datasets', 'unclean_tutor_requests.csv')
     )
-    new_rows = []
+
     # todo: change tqdm progress bar to show seconds rather than 'it' unit, and display bar
+    new_rows = []
     row_iter = tqdm.tqdm(old_df.itertuples()) if show_progress_bar else old_df.itertuples()
     for row in row_iter:
         new_row = build_new_tutor_request_row(row)
