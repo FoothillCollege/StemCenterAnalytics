@@ -51,11 +51,11 @@ class AliasTable(object):
 
     Parameters
     ----------
-    kwargs : keyword-arguments
-        Each parameter creates a corresponding row in the table according to:
-        * relative position of keyword-argument -> ordering (aka 1-based index)
-        * kwarg-key (string) -> name (aka official name)
-        * kwarg-value (set of strings) -> acceptable aliases (aka alternate names)
+    args : positional arguments, each as a tuple with a string and set of strings
+        Each argument creates a corresponding row in the table according to:
+        * relative position of argument -> ordering (aka 1-based index)
+        * first item in pair (string) -> name (aka official name)
+        * second item in pair (set of strings) -> acceptable aliases (aka alternate names)
 
     Attributes
     ----------
@@ -86,25 +86,25 @@ class AliasTable(object):
 
     Examples
     --------
-    >>> a0 = ('joseph', {'joseph', 'jose', 'joe', 'jo'})  # joseph referred by any of the left values
-    >>> a1 = ('sally', {'sally'})                         # sally referred to only by sally
-    >>> a2 = ('thomas', {'tom'})                          # thomas referred to only by tom
-    >>> a3 = ('zoe', {'zoe', 'zo'})                       # zoe referred to by zoe or zo
+    >>> a0 = ('joe', {'joseph', 'jose', 'joe', 'jo'})    # joseph referred by any of the right names
+    >>> a1 = ('sally',  {'sally'})                       # sally referred to only by sally
+    >>> a2 = ('thomas', {'tom'})                         # thomas referred to only by tom
+    >>> a3 = ('zoe',    {'zoe', 'zo'})                   # zoe referred to by zoe or zo
     >>> ORDERED_NAMES = AliasTable(a0, a1, a2, a3)
     >>> print(ORDERED_NAMES)
     **************** Alias Table ****************
     | ORDERING |  NAME  |        ALIASES        |
-    |    1     | joseph | jo, joe, jose, joseph |
+    |    1     |  joe   | jo, joe, jose, joseph |
     |    2     | sally  |         sally         |
     |    3     | thomas |          tom          |
     |    4     |  zoe   |        zo, zoe        |
     |___________________________________________|
     >>> ORDERED_NAMES.lookup_by_alias('joseph', raise_if_not_found=False)
-    'joseph'
+    'joe'
     >>> ORDERED_NAMES.lookup_by_alias('jo', raise_if_not_found=False)
-    'joseph'
+    'joe'
     >>> ORDERED_NAMES.lookup_by_ordering('1', raise_if_not_found=False)
-    'joseph'
+    'joe'
     >>> ORDERED_NAMES.lookup_by_ordering(2, raise_if_not_found=False)
     'sally'
     >>> ORDERED_NAMES.lookup_by_ordering('joseph', raise_if_not_found=False)
@@ -113,7 +113,6 @@ class AliasTable(object):
 
     def __init__(self, *args: Tuple[str, Set[str]]):
         """Initialize collection with any number of string, set of string pairs."""
-        # todo: switch to keyword args upon updating to python 3.6
         for pair in args:
             if (len(pair) != 2 or not isinstance(pair, tuple) or not
                     isinstance(pair[0], str) or not isinstance(pair[1], set)):
