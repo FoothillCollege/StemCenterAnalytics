@@ -69,3 +69,4 @@ from stem_center_analytics.interface import TutorLog, LoginData
 # after the above is done, then reflect the above changes in `_run_initial_setup`
 
 # todo: try benchmarking with shorter, abbreviated names, both in writing and reading
+# todo: switch to docker file bootup, so that there is no longer a limit on slug size
