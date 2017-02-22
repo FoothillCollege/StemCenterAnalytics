@@ -148,8 +148,8 @@ class _SCWrapper(object):
         if isinstance(quarters, str) and ' - ' in quarters:
             left, _, right = quarters.partition(' - ')
             if len(left.split()) != 2 or len(right.split()) != 2:
-                raise prs.ParsingError('\'{}\' is invalid - only quarters with years can be '
-                                       'parsed as dashed input.')
+                raise prs.InvalidInputError(quarters, 'only quarters with years can be '
+                                                      'parsed as dashed input.')
 
         keys = (prs.TIME_UNIT_VALUES.QUARTERS_WITH_YEARS.keys() if with_years else
                 prs.TIME_UNIT_VALUES.QUARTERS.keys())
@@ -224,7 +224,7 @@ class _SCWrapper(object):
         on what individual times (on either side of the given dash) are valid.
         """
         if not isinstance(time_range, str) or ' - ' not in time_range:
-            raise prs.ParsingError('\'{}\' is invalid - only dashed input is allowed.'.format(time_range))
+            raise prs.InvalidInputError(time_range, 'only dashed input is allowed.')
         start_time, end_time = prs.parse_user_input(
             user_input=time_range,
             mapping_func=prs.parse_time,

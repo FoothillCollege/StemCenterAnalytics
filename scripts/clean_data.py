@@ -34,7 +34,7 @@ def _extract_elapsed_time(t1: pd.Timestamp, t2: pd.Timestamp, as_datetime=True) 
     """Return result of t2 - t1, with all times of string format 'HH:MM:SS'."""
     wait_time = pd.Timedelta(t2 - t1).components
     h, m, s = wait_time.hours, wait_time.minutes, wait_time.seconds
-    return input_validation.parse_time('{}:{}:{}'.format(h, m, s), as_time_object=as_datetime)
+    return input_validation.parse_time(f'{h}:{m}:{s}', as_time_object=as_datetime)
 
 
 def _extract_time(dt: str) -> pd.Timestamp.time:

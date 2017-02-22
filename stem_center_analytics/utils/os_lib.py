@@ -117,7 +117,7 @@ def remove_directory(dir_path: str, ignore_errors=False) -> None:
             ensure_directory_exists(dir_path_)
             shutil.rmtree(path=dir_path_, ignore_errors=False)
         except Exception:
-            raise OSError('Directory \'{}\' failed to be removed.'.format(dir_path_))
+            raise OSError(f'Directory \'{dir_path_}\' failed to be removed.')
 
 
 def remove_file(file_path: str, ignore_errors=False) -> None:
@@ -131,7 +131,7 @@ def remove_file(file_path: str, ignore_errors=False) -> None:
             ensure_file_exists(file_path_)
             os.remove(file_path_)
         except Exception:
-            raise OSError('File \'{}\' failed to be removed.'.format(file_path_))
+            raise OSError(f'File \'{file_path_}\' failed to be removed.')
 
 
 @contextlib.contextmanager
@@ -194,7 +194,7 @@ def ensure_successful_imports(path: str, names: Sequence[str]) -> None:
             except ImportError:
                 unsuccessful_imports.append(name)
     if unsuccessful_imports:
-        raise ImportError('Failed to import modules - {}.'.format(tuple(unsuccessful_imports)))
+        raise ImportError(f'Failed to import modules - {tuple(unsuccessful_imports)}.')
 
 
 def ensure_file_exists(file_path: str) -> None:
@@ -298,13 +298,12 @@ def ensure_valid_file_type(file_path: str, file_type: str) -> None:
     * In contrast to most other functions in `os_lib` starting with 'ensure',
       given path is NOT checked for existence
     """
-    file_name, file_extension = get_basename(file_path), get_extension(file_path)
-    if file_name.count('.') != 1 or file_extension == '':
-        raise ValueError('File type \'{}\' is invalid - only single file '
-                         'extension is supported.'.format(file_name, file_type))
-    if file_extension.lstrip('.') != file_type.lstrip('.'):
-        raise ValueError('File type \'{}\' is invalid - file must be of type \'{}\'.'
-                         .format(file_extension.lstrip('.'), file_type.lstrip('.')))
+    file_type_ = file_type.lstrip('.')
+    file_name, file_extension = get_basename(file_path), get_extension(file_path).lstrip('.')
+    if file_name.count('.') != 1:
+        raise ValueError(f'File \'{file_name}\' is invalid - file name must have a single extension.')
+    if file_extension != file_type_:
+        raise ValueError(f'File \'{file_name}\' is invalid - file must be of type \'{file_type_}\'.')
 
 
 def ensure_valid_file_encoding(file_path: str, encoding: str) -> None:
@@ -313,13 +312,11 @@ def ensure_valid_file_encoding(file_path: str, encoding: str) -> None:
     encoding_ = encoding.strip().lower()
 
     try:
-        with codecs.open(file_path_, mode='r', encoding=encoding_, errors='strict') as file:
-            pass
+        with codecs.open(file_path_, mode='r', encoding=encoding_, errors='strict'): pass
     except LookupError:
-        raise LookupError('Unknown encoding - \'{}\'.'.format(encoding_)) from None
+        raise LookupError(f'Unknown encoding - \'{encoding_}\'.') from None
     except UnicodeError:
-        raise UnicodeDecodeError(
-            'File \'{}\' cannot be decoded as \'{}\'.'.format(file_path_, encoding_))
+        raise UnicodeDecodeError(f'File \'{file_path_}\' cannot be decoded as \'{encoding_}\'.')
 
 
 # ------------------------------------- path name manipulation -------------------------------------
@@ -341,7 +338,7 @@ def normalize_path(path: str) -> str:
 
 
 def get_extension(path: str) -> str:
-    """Return path's extension with or without leading '.' separator."""
+    """Return path's (last) extension, including leading '.' separator."""
     return os.path.splitext(os.path.normpath(path.strip(' ')))[-1].lower()
 
 

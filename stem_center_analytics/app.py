@@ -56,8 +56,7 @@ def _determine_quarter_by_date(date_string: str) -> str:
         quarter_row = df.ix[quarter_name]
         if quarter_row['start_date'] <= date <= quarter_row['end_date']:
             return quarter_name
-    raise ValueError('Date {} does not fall between dates of any '
-                     'archived quarters.'.format(date_string))
+    raise ValueError(f'Date {date_string} does not fall between dates of any archived quarters.')
 
 
 def _parse_request(request_args: flask.Request.args) -> dict:
@@ -119,11 +118,12 @@ def _get_file(quarter: str, time_range_type: str,
     """
     if courses != 'all' and courses != ('all',) and courses != ['all']:
         raise ValueError('No specific courses supported yet.')
+    time_range_ = time_range.replace('+', ' ').replace(' ', '_')
     matched_file = os_lib.join_path(
         PROJECT_DIR, 'external_datasets', 'pre_generated_data',
         quarter.replace('+', ' ').replace(' ', '_'),
-        'time_range={}+{}&interval={}.json'
-    ).format(time_range_type, time_range.replace('+', ' ').replace(' ', '_'), interval)
+        f'time_range={time_range_type}+{time_range_}&interval={interval}.json'
+    )
     return io_lib.read_json_file(matched_file)
 
 

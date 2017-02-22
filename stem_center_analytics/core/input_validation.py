@@ -38,7 +38,7 @@ from stem_center_analytics import warehouse
 class InvalidInputError(ValueError):
     """Base exception raised for value-related errors encountered while parsing a string."""
     def __init__(self, value: object, reason: str):
-        super().__init__('\'{}\' is invalid - {}'.format(value, reason))
+        super().__init__(f'\'{value}\' is invalid - {reason}')
 
 
 class AliasTable(object):
@@ -178,7 +178,7 @@ class AliasTable(object):
         except (TypeError, ValueError, IndexError):
             if not raise_if_not_found:
                 return None
-            raise InvalidInputError(ordering, 'ordering must fall between 1 and '.format(len(self.names)))
+            raise InvalidInputError(ordering, f'ordering must fall between 1 and {len(self.names)}.')
 
     def lookup_by_alias(self, alias: str, raise_if_not_found: bool=True) -> Union[None, str]:
         """Lookup name in table according to its alias.
@@ -212,7 +212,7 @@ class AliasTable(object):
         if not raise_if_not_found:
             return None
         valid_names = (self.names[:2] + ('...',) + self.names[-2:]) if len(self.names) > 4 else self.names
-        raise InvalidInputError(alias, 'cannot be recognized as one of '.format(valid_names))
+        raise InvalidInputError(alias, f'cannot be recognized as one of {valid_names}')
 
 
 #region Name Mapping Definitions for column, other unit, and time unit label names
@@ -612,7 +612,7 @@ def parse_quarter(quarter: str, with_year: bool=True) -> str:
         return (map_term(quarter_name) + ' ' + map_year(quarter_year) if with_year else
                 map_term(quarter_name))
     except InvalidInputError:
-        message = ('quarter name must correspond to on of {}'.format(TIME_UNIT_VALUES.QUARTERS.names))
+        message = f'quarter name must correspond to on of {TIME_UNIT_VALUES.QUARTERS.names}'
         message += ' followed by a 2 or 4 digit year in current century.' if with_year else '.'
         raise InvalidInputError(quarter, message) from None
 
@@ -701,7 +701,7 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
         if subject not in set_of_all_courses:
             raise InvalidInputError
     except InvalidInputError:
-        raise InvalidInputError(course_name_, 'subject \'{}\' is not on record.'.format(subject)) from None
+        raise InvalidInputError(course_name_, f'subject \'{subject}\' is not on record.') from None
 
     full_course_name = ' '.join([subject, number, section]).strip(' ')
     if full_course_name in set_of_all_courses:
@@ -710,10 +710,10 @@ def parse_course(course_name: str, check_records: bool=False) -> str:
     # full course name not record: check if it's due to unavailable course section/number
     course_name_without_section = ' '.join([subject, number]).strip(' ')
     if course_name_without_section in set_of_all_courses:
-        raise InvalidInputError(course_name_, 'course \'{}\' has no section \'{}\' on record.'
-                                .format(course_name_without_section, section))
+        raise InvalidInputError(course_name_, f'course \'{course_name_without_section}\' '
+                                              f'has no section \'{section}\' on record.')
     if subject in set_of_all_courses:
-        raise InvalidInputError(course_name_, 'subject \'{}\' has no course number \'{}\' on record.'
-                                .format(subject, number))
-    raise InvalidInputError(course_name_, 'course name requires a recognizable subject, followed'
-                            'by either an existing course\'s number OR its number and section.')
+        raise InvalidInputError(course_name_, f'subject \'{subject}\' has no course number '
+                                              f'\'{number}\' on record.')
+    raise InvalidInputError(course_name_, 'course name requires a recognizable subject, followed by '
+                                          'either an existing course\'s number OR its number and section.')

@@ -128,7 +128,7 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
                  for key in wait_time[wait_time_key]}
         }
         interval_ = 'week' if interval_ == 'week_in_quarter' else interval_
-        file_name = 'time_range={}&interval={}.json'.format(range_, interval_)
+        file_name = f'time_range={range_}&interval={interval_}.json'
         io_lib.create_json_file(file_path=os_lib.join_path(output_dir, file_name), contents=data)
 
     if len(set(requests_in_quarter['quarter'])) != 1:
@@ -137,24 +137,21 @@ def generate_demo_quarter_data(requests_in_quarter: pd.DataFrame, output_dir: st
     # single file (since single quarter) generated containing daily stats over a quarter
     quarter_term, quarter_year = requests_in_quarter['quarter'].iloc[0].split()
     generate_json_demo_data(data_in_range=requests_in_quarter,
-                            range_='quarter+{}_{}'.format(quarter_term, quarter_year),
-                            interval_='week_in_quarter')
+                            range_=f'quarter+{quarter_term}_{quarter_year}', interval_='week_in_quarter')
 
     # for each week in quarter, generate a file containing daily stats over a week range
     all_weeks_in_qtr = requests_in_quarter['week_in_quarter'].unique()
     for week_num in all_weeks_in_qtr:
         single_week_data = requests_in_quarter[requests_in_quarter['week_in_quarter'] == week_num]
         generate_json_demo_data(data_in_range=single_week_data,
-                                range_='week+{}'.format(week_num),
-                                interval_='day')
+                                range_=f'week+{week_num}', interval_='day')
 
     # for each day in quarter, generate a file containing hourly stats over a day (24 hour) range
     all_recorded_datetimes = pd.Series(data=requests_in_quarter.index)
     dates_in_qtr = all_recorded_datetimes.apply(func=lambda dt: str(dt).split()[0]).unique()
     for date in dates_in_qtr:
         generate_json_demo_data(data_in_range=requests_in_quarter[date],
-                                range_='day+{}'.format(date),
-                                interval_='hour')
+                                range_=f'day+{date}', interval_='hour')
 
 
 def main():

@@ -249,13 +249,12 @@ def create_sqlite_file(file_path: str, replace_if_exists: bool=False) -> None:
         connect_to_sqlite_database(file_path_)
     except:
         os_lib.remove_file(file_path_)  # remove faultily auto-created file if exists
-        raise ValueError('Cannot create database - '
-                         'valid connection to \'{}\' cannot be established.'
-                         .format(file_path_))
+        raise ValueError(f'Cannot create database - '
+                         f'a valid connection to \'{file_path_}\' cannot be established.')
 
     # generate a report for the database update
     action_taken = 'replaced' if file_exists_before_creation else 'created'
-    print('Database \'{}\' was successfully {}.'.format(os_lib.get_basename(file_path), action_taken))
+    print(f'Database \'{os_lib.get_basename(file_path)}\' was successfully {action_taken}.')
 
 
 def read_sqlite_table(con: sqlite3.Connection, table_name: str,
@@ -365,9 +364,8 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
     """
     normalized_name = table_name.replace('-', '').replace(' ', '').replace('_', '')
     if not normalized_name.isalnum():  # contains only letters, digits, '_', ' ', '-'
-        raise ValueError('Given table name \'{}\' contains illegal characters - '
-                         '\n    only letters, digits, spaces, dashes, and underscores are allowed.'
-                         .format(table_name))
+        raise ValueError(f'Given table name \'{table_name}\' contains illegal characters - '
+                         f'\n    only letters, digits, spaces, dashes, and underscores are allowed.')
 
     table_is_in_db = is_table_in_database(con, table_name)
     actions = ('fail', 'append', 'replace')
@@ -389,11 +387,11 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
         data.to_sql(name=table_name, con=con, if_exists=if_table_exists)
     except Exception as e:
         # usually this is too fragile, but no other way to catch if_table_exists='fail' exception
-        if str(e) == 'ValueError: Table \'{}\' already exists.'.format(table_name):
+        if str(e) == f'ValueError: Table \'{table_name}\' already exists.':
             pass
         else:
-            raise IOError('DataFrame cannot be imported to table \'{}\' due to an internal error '
-                          'during database transaction'.format(full_table_name))
+            raise IOError(f'DataFrame cannot be imported to table \'{full_table_name}\' '
+                          f'due to an internal error during database transaction')
 
     # generate a report for the database update
     deciding_factors = (if_table_exists, table_is_in_db)
@@ -405,9 +403,9 @@ def write_to_sqlite_table(con: sqlite3.Connection, data: pd.DataFrame,
         ('replace', True): 'successfully replaced',
         ('replace', False): 'successfully created'
     }
-    print('Write transaction with `if_table_exists` set to \'{}\':'
-          '\n    Table \'{}\' {} with {:,} rows changed.'
-          .format(if_table_exists, full_table_name, outcomes[deciding_factors], con.total_changes))
+    # todo: figure out how to format int with commas in f-string (previously '{:,}'.format(some_num))
+    print(f'Write transaction with `if_table_exists` set to \'{if_table_exists}\':'
+          f'\n    Table \'{full_table_name}\' {outcomes[deciding_factors]} with {con.total_changes} rows changed.')
 
 
 def connect_to_sqlite_database(file_path: str) -> sqlite3.Connection:
@@ -450,15 +448,14 @@ def connect_to_sqlite_database(file_path: str) -> sqlite3.Connection:
     # ensure byte encoding indicates file is of type SQLite
     with codecs.open(file_path_, 'r', 'utf-8') as file:
         if codecs.encode(file.read(16)) == '53514c69746520666f726d6174203300':
-            raise UnicodeDecodeError('File \'{}\' is either corrupted or not a '
-                                     'recognizable SQLite file.'.format(file_path_)) from None
+            raise UnicodeDecodeError(f'File \'{file_path_}\' is either corrupted or not a '
+                                     f'recognizable SQLite file.') from None
 
     try:
         return sqlite3.Connection(file_path_)
     except Exception:
         raise ConnectionRefusedError(errno.ECONNREFUSED,
-                                     'SQLite file \'{}\' cannot be reached'
-                                     .format(os_lib.get_basename(file_path_)))
+                                     'SQLite file \'{os_lib.get_basename(file_path_)}\' cannot be reached')
 
 
 def get_all_columns_in_table(con: sqlite3.Connection, table_name: str) -> List[str]:
@@ -508,7 +505,7 @@ def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
     table_query = 'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?'
     is_table_in_database_ = bool(con.execute(table_query, [table_name]).fetchone())
     if not is_table_in_database_:
-        raise ValueError('Table \'{}\' does not exist @ database \'{}\'.'.format(table_name, con))
+        raise ValueError(f'Table \'{table_name}\' does not exist @ database \'{con}\'.')
 
     if columns_to_select:
         cursor = con.execute("SELECT * FROM " + table_name)
@@ -516,9 +513,8 @@ def ensure_table_is_in_database(con: sqlite3.Connection, table_name: str,
         set_of_columns = set(columns_to_select)
         if (len(columns_to_select) != len(set_of_columns) or not
                 set_of_columns.issubset(columns_in_table)):
-            raise ValueError('{} is invalid - `columns_to_select` are not a '
-                             'unique subset of the columns {} in the table \'{}\'.'
-                             .format(tuple(columns_to_select), tuple(columns_in_table), table_name))
+            raise ValueError('{tuple(columns_to_select)} is invalid - `columns_to_select` are not a '
+                             'unique subset of the columns {tuple(columns_in_table)} in the table \'{table_name}\'.')
 
 
 # ----------------------------------------- IMAP SERVER IO -----------------------------------------
